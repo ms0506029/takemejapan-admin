@@ -722,14 +722,16 @@
     <script>
         // 管理員帳號設定
         const ADMIN_ACCOUNTS = {
-            'hu123': '123123',
-            'jay123': '123123'
+            'admin': 'takemejapan2024',    // 老闆帳號（超級管理員）
+            'hu123': '123123',             // 員工帳號
+            'jay123': '123123'             // 員工帳號
         };
 
         // 管理員權限設定
         const ADMIN_ROLES = {
-            'hu123': 'admin',
-            'jay123': 'admin'
+            'admin': 'super_admin',        // 超級管理員（老闆）
+            'hu123': 'admin',              // 一般管理員
+            'jay123': 'admin'              // 一般管理員
         };
 
         // API 設定
