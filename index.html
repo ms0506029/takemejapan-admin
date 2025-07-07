@@ -744,8 +744,16 @@
     <script>
         // 管理員帳號設定
         const ADMIN_ACCOUNTS = {
-            'hu123': '123123',
-            'jay123': '123123'
+            'admin': 'takemejapan2024',    // 老闆帳號（超級管理員）
+            'hu123': '123123',             // 員工帳號
+            'jay123': '123123'             // 員工帳號
+        };
+
+        // 管理員權限設定
+        const ADMIN_ROLES = {
+            'admin': 'super_admin',        // 超級管理員（老闆）
+            'hu123': 'admin',              // 一般管理員
+            'jay123': 'admin'              // 一般管理員
         };
 
         // LINE Bot 設定
@@ -769,7 +777,7 @@
                 lineUserId: 'U1234567890'
             },
             {
-                id: 'TMJ002',
+                id: 'TMJ002', 
                 customer: '李小華',
                 product: '星巴克保溫杯',
                 amount: 890,
@@ -855,15 +863,19 @@
             setTimeout(() => {
                 if (ADMIN_ACCOUNTS[username] && ADMIN_ACCOUNTS[username] === password) {
                     currentUser = username;
+                    const userRole = ADMIN_ROLES[username];
                     
                     if (rememberMe) {
                         localStorage.setItem('adminUser', username);
+                        localStorage.setItem('adminRole', userRole);
                         localStorage.setItem('adminLoginTime', new Date().getTime().toString());
                     }
                     
-                    showToast('登入成功！歡迎回來 ' + username, 'success');
+                    // 根據角色顯示不同歡迎訊息
+                    const welcomeMessage = userRole === 'super_admin' ? '歡迎回來，老闆！' : `歡迎回來，${username}！`;
+                    showToast(welcomeMessage, 'success');
                     showDashboard();
-                    logActivity(username, '系統登入', '管理員登入系統');
+                    logActivity(username, '系統登入', `管理員登入系統 (權限: ${userRole})`);
                 } else {
                     document.getElementById('loginError').style.display = 'block';
                     showToast('帳號或密碼錯誤', 'error');
@@ -885,7 +897,11 @@
         function showDashboard() {
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('adminDashboard').style.display = 'block';
-            document.getElementById('currentUser').textContent = currentUser;
+            
+            // 根據使用者角色顯示不同的稱呼
+            const userRole = ADMIN_ROLES[currentUser];
+            const displayName = userRole === 'super_admin' ? '老闆' : currentUser;
+            document.getElementById('currentUser').textContent = displayName;
             
             // 載入初始資料
             loadDashboardData();
@@ -955,7 +971,7 @@
             // 狀態樣式映射
             const statusClass = {
                 'unpaid': 'status-unpaid',
-                'paid': 'status-paid',
+                'paid': 'status-paid', 
                 'outofstock': 'status-outofstock',
                 'shipping': 'status-shipping'
             };
@@ -1008,8 +1024,8 @@
             
             const filteredData = ordersData.filter(order => {
                 const statusMatch = !status || order.status === status;
-                const searchMatch = !search ||
-                    order.id.toLowerCase().includes(search) ||
+                const searchMatch = !search || 
+                    order.id.toLowerCase().includes(search) || 
                     order.customer.toLowerCase().includes(search) ||
                     order.product.toLowerCase().includes(search);
                 
@@ -1063,7 +1079,7 @@
             
             const statusText = {
                 'unpaid': '等待付款',
-                'paid': '已確認付款',
+                'paid': '已確認付款', 
                 'outofstock': '商品缺貨',
                 'shipping': '準備出貨'
             };
@@ -1192,7 +1208,7 @@
             
             const icon = {
                 'success': 'fa-check-circle',
-                'error': 'fa-exclamation-circle',
+                'error': 'fa-exclamation-circle', 
                 'warning': 'fa-exclamation-triangle',
                 'info': 'fa-info-circle'
             };
@@ -1227,7 +1243,7 @@
             const now = new Date();
             const timeString = now.toLocaleString('zh-TW', {
                 year: 'numeric',
-                month: '2-digit',
+                month: '2-digit', 
                 day: '2-digit',
                 hour: '2-digit',
                 minute: '2-digit',
