@@ -762,85 +762,42 @@
        
         
        
-        // 修正後的 API 請求函數
-        // 簡化的 API 請求函數
+       
+        // 找到 apiRequest 函數，替換為：
         async function apiRequest(endpoint, options = {}) {
-            const { method = 'GET', data = null, params = {} } = options;
+            const { params = {} } = options;
             
-            try {
-                let url = API_CONFIG.baseUrl;
-                
-                // 建構參數
-                const allParams = { ...params };
-                if (data) {
-                    Object.assign(allParams, data);
-                }
-                
-                if (Object.keys(allParams).length > 0) {
-                    const urlParams = new URLSearchParams();
-                    Object.keys(allParams).forEach(key => {
-                        urlParams.append(key, String(allParams[key]));
-                    });
-                    url += `?${urlParams.toString()}`;
-                }
-                
-                console.log(`🔗 API 請求: ${url}`);
-                
-                // 直接用 fetch 試試
-                try {
-                    const response = await fetch(url, {
-                        method: 'GET',
-                        mode: 'cors',
-                        credentials: 'omit'
-                    });
-                    
-                    if (response.ok) {
-                        const result = await response.json();
-                        console.log('✅ Fetch 成功:', result);
-                        return result;
-                    }
-                } catch (fetchError) {
-                    console.log('⚠️ Fetch 失敗，改用 script 標籤:', fetchError.message);
-                }
-                
-                // 備用：直接載入並解析回應
-                return new Promise((resolve) => {
-                    const script = document.createElement('script');
-                    const callbackName = 'jsonp_' + Date.now();
-                    
-                    // 設定全域回調
-                    window[callbackName] = function(data) {
-                        delete window[callbackName];
-                        document.head.removeChild(script);
-                        resolve(data);
-                    };
-                    
-                    script.onerror = function() {
-                        delete window[callbackName];
-                        document.head.removeChild(script);
-                        resolve({ success: false, error: 'API 連接失敗' });
-                    };
-                    
-                    const separator = url.includes('?') ? '&' : '?';
-                    script.src = `${url}${separator}callback=${callbackName}`;
-                    document.head.appendChild(script);
-                    
-                    // 10秒超時
-                    setTimeout(() => {
-                        if (window[callbackName]) {
-                            delete window[callbackName];
-                            if (script.parentNode) {
-                                document.head.removeChild(script);
-                            }
-                            resolve({ success: false, error: '請求超時' });
-                        }
-                    }, 10000);
+            let url = API_CONFIG.baseUrl;
+            
+            if (Object.keys(params).length > 0) {
+                const urlParams = new URLSearchParams();
+                Object.keys(params).forEach(key => {
+                    urlParams.append(key, String(params[key]));
                 });
-                
-            } catch (error) {
-                console.error('❌ API 請求錯誤:', error);
-                return { success: false, error: error.message };
+                url += `?${urlParams.toString()}`;
             }
+            
+            // 只用 JSONP 方式
+            return new Promise((resolve) => {
+                const script = document.createElement('script');
+                const callbackName = 'jsonp_' + Date.now();
+                
+                window[callbackName] = function(data) {
+                    delete window[callbackName];
+                    document.head.removeChild(script);
+                    resolve(data);
+                };
+                
+                script.onerror = function() {
+                    delete window[callbackName];
+                    document.head.removeChild(script);
+                    resolve({ success: false, error: 'API 連接失敗' });
+                };
+                
+                const separator = url.includes('?') ? '&' : '?';
+                script.src = `${url}${separator}callback=${callbackName}`;
+                document.head.appendChild(script);
+            });
         }
 
         // 載入統計資料
@@ -1242,7 +1199,7 @@
                     }, 10000);
                 }
                 
-                const result = await apiRequest('', {
+                const result = await ('', {
                     method: 'GET',
                     params: { 
                         action: 'syncOrders',
