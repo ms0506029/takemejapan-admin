@@ -799,6 +799,16 @@
                 document.head.appendChild(script);
             });
         }
+        // 測試用假資料
+        if (true) { // 改為 false 恢復 API 呼叫
+            statsData = { totalOrders: 10, pendingOrders: 3, completedOrders: 7, totalCustomers: 8 };
+            ordersData = [
+                { id: "TEST001", customer: "測試客戶", product: "測試商品", amount: 1000, status: "paid", shipping: "2025/01/15" }
+            ];
+            updateDashboardStats();
+            renderOrdersTable();
+            return;
+        }
 
         // 載入統計資料
        
@@ -838,6 +848,18 @@
                 updateDashboardStats();
             }
         }
+        // 測試用假資料
+        if (true) { // 改為 false 恢復 API 呼叫
+            statsData = { totalOrders: 10, pendingOrders: 3, completedOrders: 7, totalCustomers: 8 };
+            ordersData = [
+                { id: "TEST001", customer: "測試客戶", product: "測試商品", amount: 1000, status: "paid", shipping: "2025/01/15" }
+            ];
+            updateDashboardStats();
+            renderOrdersTable();
+            return;
+        }
+
+        
         // 載入訂單資料
         async function loadOrdersDataFromAPI() {
             try {
