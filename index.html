@@ -796,7 +796,9 @@
                 };
                 
                 const separator = url.includes('?') ? '&' : '?';
-                script.src = `${url}${separator}callback=${callbackName}`;
+                const finalUrl = `${url}${separator}callback=${callbackName}`;
+                console.log('🔗 完整 API URL:', finalUrl);
+                script.src = finalUrl;
                 document.head.appendChild(script);
             });
         }
