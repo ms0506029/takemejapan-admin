@@ -788,10 +788,23 @@
                     document.head.removeChild(script);
                     resolve(data);
                 };
+                // 設定 10 秒超時
+                setTimeout(() => {
+                    if (window[callbackName]) {
+                        delete window[callbackName];
+                        if (document.head.contains(script)) {
+                            document.head.removeChild(script);
+                        }
+                        resolve({ success: false, error: 'API 請求超時' });
+                    }
+                }, 10000);
                 
                 script.onerror = function() {
+                    console.log('❌ Script 載入錯誤，但可能是誤報');
                     delete window[callbackName];
-                    document.head.removeChild(script);
+                    if (document.head.contains(script)) {
+                        document.head.removeChild(script);
+                    }
                     resolve({ success: false, error: 'API 連接失敗' });
                 };
                 
