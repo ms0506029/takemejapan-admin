@@ -779,43 +779,65 @@
             }
             
             // 只用 JSONP 方式
-            return new Promise((resolve) => {
-                const script = document.createElement('script');
-                const callbackName = 'jsonp_' + Date.now();
+            async function apiRequest(endpoint, options = {}) {
+                const { params = {} } = options;
                 
-                window[callbackName] = function(data) {
-                    delete window[callbackName];
-                    document.head.removeChild(script);
-                    resolve(data);
-                };
-                // 設定 10 秒超時
-                setTimeout(() => {
-                    if (window[callbackName]) {
+                return new Promise((resolve, reject) => {
+                    const callbackName = 'jsonp_callback_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+                    
+                    // 合併參數
+                    const allParams = { callback: callbackName, ...params };
+                    const paramString = Object.keys(allParams)
+                        .map(key => `${key}=${encodeURIComponent(allParams[key])}`)
+                        .join('&');
+                    
+                    const url = `${API_CONFIG.baseUrl}?${paramString}`;
+                    
+                    // 設置全域回調函數
+                    window[callbackName] = function(data) {
+                        cleanup();
+                        resolve(data);
+                    };
+                    
+                    // 清理函數
+                    const cleanup = () => {
                         delete window[callbackName];
-                        if (document.head.contains(script)) {
-                            document.head.removeChild(script);
+                        if (script.parentNode) {
+                            script.parentNode.removeChild(script);
                         }
-                        resolve({ success: false, error: 'API 請求超時' });
-                    }
-                }, 10000);
-                
-                script.onerror = function() {
-                    console.log('❌ Script 載入錯誤，但可能是誤報');
-                    delete window[callbackName];
-                    if (document.head.contains(script)) {
-                        document.head.removeChild(script);
-                    }
-                    resolve({ success: false, error: 'API 連接失敗' });
-                };
-                
-                const separator = url.includes('?') ? '&' : '?';
-                script.async = true;
-                script.defer = true;
-                script.type = 'text/javascript';
-                script.src = `${url}${separator}callback=${callbackName}`;
-                document.head.appendChild(script);
-            });
-        }
+                    };
+                    
+                    // 建立 script 標籤
+                    const script = document.createElement('script');
+                    script.async = true;
+                    script.defer = true;
+                    script.type = 'text/javascript';
+                    
+                    // 錯誤處理
+                    script.onerror = function() {
+                        cleanup();
+                        reject(new Error('JSONP 請求失敗'));
+                    };
+                    
+                    // 超時處理（10秒）
+                    const timeoutId = setTimeout(() => {
+                        if (window[callbackName]) {
+                            cleanup();
+                            reject(new Error('API 請求超時'));
+                        }
+                    }, 10000);
+                    
+                    // 成功時清除超時
+                    const originalCallback = window[callbackName];
+                    window[callbackName] = function(data) {
+                        clearTimeout(timeoutId);
+                        originalCallback(data);
+                    };
+                    
+                    script.src = url;
+                    document.head.appendChild(script);
+                });
+            }
        
 
         // 載入統計資料
