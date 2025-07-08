@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LINE Bot 電商後台管理系統</title>
     <!-- 改回原來的 -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         :root {
@@ -800,16 +800,7 @@
                 document.head.appendChild(script);
             });
         }
-        // 測試用假資料
-        if (true) { // 改為 false 恢復 API 呼叫
-            statsData = { totalOrders: 10, pendingOrders: 3, completedOrders: 7, totalCustomers: 8 };
-            ordersData = [
-                { id: "TEST001", customer: "測試客戶", product: "測試商品", amount: 1000, status: "paid", shipping: "2025/01/15" }
-            ];
-            updateDashboardStats();
-            renderOrdersTable();
-            return;
-        }
+       
 
         // 載入統計資料
        
@@ -849,17 +840,7 @@
                 updateDashboardStats();
             }
         }
-        // 測試用假資料
-        if (true) { // 改為 false 恢復 API 呼叫
-            statsData = { totalOrders: 10, pendingOrders: 3, completedOrders: 7, totalCustomers: 8 };
-            ordersData = [
-                { id: "TEST001", customer: "測試客戶", product: "測試商品", amount: 1000, status: "paid", shipping: "2025/01/15" }
-            ];
-            updateDashboardStats();
-            renderOrdersTable();
-            return;
-        }
-
+        
         
         // 載入訂單資料
         async function loadOrdersDataFromAPI() {
