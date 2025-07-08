@@ -828,23 +828,43 @@
 
         // 載入統計資料
        
+        // 在 loadStatsData 函數中，暫時替換 API 調用
         async function loadStatsData() {
             try {
                 showToast('正在載入統計資料...', 'info');
                 
-                const result = await apiRequest('', {
-                    params: { action: 'getStats' }
+                // 🔴 暫時用直接的 script 標籤測試
+                const result = await new Promise((resolve) => {
+                    const script = document.createElement('script');
+                    const callbackName = 'testCallback_' + Date.now();
+                    
+                    window[callbackName] = function(data) {
+                        delete window[callbackName];
+                        document.head.removeChild(script);
+                        resolve(data);
+                    };
+                    
+                    script.src = `${API_CONFIG.baseUrl}?action=getStats&callback=${callbackName}`;
+                    script.onerror = () => {
+                        delete window[callbackName];
+                        document.head.removeChild(script);
+                        resolve({ success: false, error: 'API 連接失敗' });
+                    };
+                    
+                    document.head.appendChild(script);
                 });
+                
+                console.log('📊 API 測試結果:', result);
                 
                 if (result && result.success && result.data) {
                     statsData = result.data;
                 } else {
-                    // 使用預設值
+                    console.log('⚠️ 使用預設統計資料');
                     statsData = {
-                        totalOrders: ordersData.length || 0,
-                        pendingOrders: ordersData.filter(o => o.status === 'unpaid').length || 0,
-                        completedOrders: ordersData.filter(o => o.status === 'paid').length || 0,
-                        totalCustomers: new Set(ordersData.map(o => o.customer)).size || 0
+                        totalOrders: 0,
+                        pendingOrders: 0,
+                        completedOrders: 0,
+                        totalCustomers: 0
                     };
                 }
                 
