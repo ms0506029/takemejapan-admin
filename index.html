@@ -638,7 +638,7 @@
                             <div class="col-md-6 text-end">
                                 <div class="btn-group">
                                     <button class="btn btn-sm btn-outline-success" onclick="bulkUpdateStatus('paid')">
-                                        批量標記已付款
+                                        批量標記已購買
                                     </button>
                                     <button class="btn btn-sm btn-outline-warning" onclick="bulkUpdateStatus('shipping')">
                                         批量更新出貨狀態
@@ -1417,9 +1417,14 @@
                 const products = JSON.parse(productInfoStr);
                 
                 if (Array.isArray(products) && products.length > 0) {
-                    productList = products.map(product => `
-                        <tr>
-                            <td>${product.name || product.title || '未知商品'}</td>
+                    productList = products.map(product => {
+                        // 🔴 改善商品名稱解析
+                        const productName = product.name || product.title || product.variant_title || 
+                                           (product.sku ? `商品 ${product.sku}` : '未知商品');
+                        
+                        return `
+                            <tr>
+                                <td>${productName}</td>
                             <td>${product.sku || product.variant_sku || '無SKU'}</td>
                             <td>${product.quantity || 1}</td>
                             <td>NT$ ${(product.price || 0).toLocaleString()}</td>
@@ -1534,44 +1539,68 @@
             modal.show();
         }
         
+        
         // 修改訂單狀態
         function editOrderStatus() {
             const orderId = window.currentOrderId;
             if (!orderId) return;
             
-            const order = ordersData.find(o => o.id === orderId);
+            const order = ordersData.find(o => o.id == orderId);
             if (!order) return;
             
+            // 🔴 改用更友善的選擇方式
             const statusOptions = [
-                { value: 'unpaid', text: '未購買' },
-                { value: 'paid', text: '已購買' }, 
-                { value: 'outofstock', text: '缺貨' },
-                { value: 'shipping', text: '預計出貨' }
+                { value: 'unpaid', text: '未購買', description: '商品尚未到貨' },
+                { value: 'paid', text: '已購買', description: '商品已到貨可出貨' }, 
+                { value: 'outofstock', text: '缺貨', description: '商品暫時缺貨' },
+                { value: 'shipping', text: '預計出貨', description: '預計X月上中下旬出貨' }
             ];
             
-            const optionsHtml = statusOptions.map(opt => 
-                `<option value="${opt.value}" ${order.status === opt.value ? 'selected' : ''}>${opt.text}</option>`
-            ).join('');
+            // 建立選項列表
+            const optionsList = statusOptions.map((opt, index) => 
+                `${index + 1}. ${opt.text} - ${opt.description}`
+            ).join('\n');
             
-            const newStatus = prompt(`請選擇新的訂單狀態：\n\n${statusOptions.map((opt, i) => `${i+1}. ${opt.text}`).join('\n')}\n\n請輸入對應數字或直接輸入狀態值：`);
+            const userInput = prompt(
+                `請選擇新的訂單狀態：\n\n${optionsList}\n\n` +
+                `目前狀態：${statusOptions.find(s => s.value === order.status)?.text || order.status}\n\n` +
+                `請輸入數字 (1-4) 或直接輸入狀態值：`
+            );
             
-            if (newStatus) {
-                let statusValue = newStatus;
+            if (userInput) {
+                let newStatus = '';
                 
                 // 處理數字輸入
-                if (['1', '2', '3', '4'].includes(newStatus)) {
-                    statusValue = statusOptions[parseInt(newStatus) - 1].value;
+                if (['1', '2', '3', '4'].includes(userInput.trim())) {
+                    newStatus = statusOptions[parseInt(userInput.trim()) - 1].value;
+                } else {
+                    // 處理直接輸入狀態值
+                    const found = statusOptions.find(opt => 
+                        opt.value === userInput.trim() || opt.text === userInput.trim()
+                    );
+                    if (found) {
+                        newStatus = found.value;
+                    }
                 }
                 
-                if (statusOptions.find(opt => opt.value === statusValue)) {
+                // 特殊處理：如果選擇預計出貨，詢問具體時間
+                if (newStatus === 'shipping') {
+                    const shippingTime = prompt('請輸入預計出貨時間（例如：2月上旬、3月中旬、4月下旬）：');
+                    if (shippingTime) {
+                        // 可以將時間資訊存在備註中
+                        order.notes = `預計出貨時間：${shippingTime}`;
+                    }
+                }
+                
+                if (newStatus && statusOptions.find(opt => opt.value === newStatus)) {
                     const oldStatus = order.status;
-                    order.status = statusValue;
+                    order.status = newStatus;
                     
                     renderOrdersTable();
                     showOrderDetail(orderId); // 重新載入詳情
-                    showToast(`訂單 ${orderId} 狀態已更新`, 'success');
+                    showToast(`訂單 ${orderId} 狀態已更新為：${statusOptions.find(s => s.value === newStatus).text}`, 'success');
                     
-                    logActivity(currentUser, '訂單狀態更新', `${orderId}: ${oldStatus} → ${statusValue}`);
+                    logActivity(currentUser, '訂單狀態更新', `${orderId}: ${oldStatus} → ${newStatus}`);
                 } else {
                     showToast('無效的狀態選擇', 'error');
                 }
@@ -1618,9 +1647,18 @@
             
             const orderIds = Array.from(checkedBoxes).map(cb => cb.value);
             
-            if (confirm(`確定要將 ${orderIds.length} 筆訂單狀態更新為 ${newStatus} 嗎？`)) {
+            const statusText = {
+                'unpaid': '未購買',
+                'paid': '已購買',
+                'outofstock': '缺貨',
+                'shipping': '預計出貨'
+            };
+            
+            const statusDisplay = statusText[newStatus] || newStatus;
+            
+            if (confirm(`確定要將 ${orderIds.length} 筆訂單狀態更新為「${statusDisplay}」嗎？`)) {
                 orderIds.forEach(orderId => {
-                    const order = ordersData.find(o => o.id === orderId);
+                    const order = ordersData.find(o => o.id == orderId); // 使用 == 而不是 ===
                     if (order) {
                         const oldStatus = order.status;
                         order.status = newStatus;
@@ -1629,7 +1667,7 @@
                 });
                 
                 renderOrdersTable();
-                showToast(`已更新 ${orderIds.length} 筆訂單狀態`, 'success');
+                showToast(`已更新 ${orderIds.length} 筆訂單狀態為「${statusDisplay}」`, 'success');
             }
         }
 
