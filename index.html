@@ -1114,7 +1114,7 @@
                 </td>
                 <td>
                     <strong>
-                        <a href="#" onclick="showOrderDetail('${order.id}'); return false;" style="color: var(--primary-color); text-decoration: none;">
+                        <a href="#" onclick="showOrderDetail(${order.id}); return false;" style="color: var(--primary-color); text-decoration: none;">
                             ${order.id}
                         </a>
                     </strong>
@@ -1399,7 +1399,10 @@
         }
         // 顯示訂單詳情
         function showOrderDetail(orderId) {
-            const order = ordersData.find(o => o.id === orderId);
+            // 🔴 修正：確保 ID 類型匹配
+            const order = ordersData.find(o => o.id == orderId);
+            
+            console.log('尋找訂單 ID:', orderId, '(類型:', typeof orderId, '), 找到:', order);
             if (!order) {
                 showToast('找不到訂單資料', 'error');
                 return;
