@@ -1549,6 +1549,7 @@
                 const backdrops = document.querySelectorAll('.modal-backdrop');
                 backdrops.forEach(backdrop => backdrop.remove());
         });
+        }
         
         
         // 修改訂單狀態
@@ -1829,7 +1830,7 @@
                 checkboxes.forEach(cb => cb.checked = e.target.checked);
             }
         });
-         
+    });    
     </script>
         <!-- 訂單詳情彈窗 -->
     <div class="modal fade" id="orderDetailModal" tabindex="-1">
