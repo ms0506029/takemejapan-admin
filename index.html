@@ -1535,13 +1535,24 @@
             // 儲存當前訂單ID供修改狀態使用
             window.currentOrderId = orderId;
             
-            // 顯示彈窗
+            // 在 showOrderDetail 函數最後加入
             const modal = new bootstrap.Modal(document.getElementById('orderDetailModal'));
             modal.show();
-        }
+            
+            // 🔴 加入彈窗關閉事件監聽
+            document.getElementById('orderDetailModal').addEventListener('hidden.bs.modal', function () {
+                // 確保頁面恢復正常狀態
+                document.body.style.overflow = 'auto';
+                document.body.classList.remove('modal-open');
+                
+                // 清除背景遮罩
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(backdrop => backdrop.remove());
+            });
         
         
         // 修改訂單狀態
+        // 修改訂單狀態 - 使用 HTML 選單
         function editOrderStatus() {
             const orderId = window.currentOrderId;
             if (!orderId) return;
@@ -1549,7 +1560,7 @@
             const order = ordersData.find(o => o.id == orderId);
             if (!order) return;
             
-            // 🔴 改用更友善的選擇方式
+            // 🔴 建立 HTML 選單而不是 prompt
             const statusOptions = [
                 { value: 'unpaid', text: '未購買', description: '商品尚未到貨' },
                 { value: 'paid', text: '已購買', description: '商品已到貨可出貨' }, 
@@ -1557,55 +1568,77 @@
                 { value: 'shipping', text: '預計出貨', description: '預計X月上中下旬出貨' }
             ];
             
-            // 建立選項列表
-            const optionsList = statusOptions.map((opt, index) => 
-                `${index + 1}. ${opt.text} - ${opt.description}`
-            ).join('\n');
+            // 建立選單 HTML
+            const selectOptions = statusOptions.map(opt => 
+                `<option value="${opt.value}" ${order.status === opt.value ? 'selected' : ''}>${opt.text} - ${opt.description}</option>`
+            ).join('');
             
-            const userInput = prompt(
-                `請選擇新的訂單狀態：\n\n${optionsList}\n\n` +
-                `目前狀態：${statusOptions.find(s => s.value === order.status)?.text || order.status}\n\n` +
-                `請輸入數字 (1-4) 或直接輸入狀態值：`
-            );
+            // 更新彈窗內容加入選單
+            const currentContent = document.getElementById('orderDetailContent').innerHTML;
+            const selectHtml = `
+                <div class="mt-3 p-3 bg-light rounded">
+                    <h6><i class="fas fa-edit me-2"></i>修改訂單狀態</h6>
+                    <div class="row">
+                        <div class="col-md-8">
+                            <select class="form-select" id="newOrderStatus">
+                                ${selectOptions}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-primary" onclick="updateOrderStatus()">
+                                <i class="fas fa-check me-1"></i>確認修改
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
             
-            if (userInput) {
-                let newStatus = '';
-                
-                // 處理數字輸入
-                if (['1', '2', '3', '4'].includes(userInput.trim())) {
-                    newStatus = statusOptions[parseInt(userInput.trim()) - 1].value;
-                } else {
-                    // 處理直接輸入狀態值
-                    const found = statusOptions.find(opt => 
-                        opt.value === userInput.trim() || opt.text === userInput.trim()
-                    );
-                    if (found) {
-                        newStatus = found.value;
-                    }
-                }
-                
-                // 特殊處理：如果選擇預計出貨，詢問具體時間
-                if (newStatus === 'shipping') {
-                    const shippingTime = prompt('請輸入預計出貨時間（例如：2月上旬、3月中旬、4月下旬）：');
-                    if (shippingTime) {
-                        // 可以將時間資訊存在備註中
-                        order.notes = `預計出貨時間：${shippingTime}`;
-                    }
-                }
-                
-                if (newStatus && statusOptions.find(opt => opt.value === newStatus)) {
-                    const oldStatus = order.status;
-                    order.status = newStatus;
-                    
-                    renderOrdersTable();
-                    showOrderDetail(orderId); // 重新載入詳情
-                    showToast(`訂單 ${orderId} 狀態已更新為：${statusOptions.find(s => s.value === newStatus).text}`, 'success');
-                    
-                    logActivity(currentUser, '訂單狀態更新', `${orderId}: ${oldStatus} → ${newStatus}`);
-                } else {
-                    showToast('無效的狀態選擇', 'error');
+            document.getElementById('orderDetailContent').innerHTML = currentContent + selectHtml;
+        }
+        
+        // 新增：實際更新狀態的函數
+        function updateOrderStatus() {
+            const orderId = window.currentOrderId;
+            const newStatusSelect = document.getElementById('newOrderStatus');
+            
+            if (!orderId || !newStatusSelect) return;
+            
+            const order = ordersData.find(o => o.id == orderId);
+            if (!order) return;
+            
+            const newStatus = newStatusSelect.value;
+            const oldStatus = order.status;
+            
+            // 特殊處理預計出貨
+            if (newStatus === 'shipping') {
+                const shippingTime = prompt('請輸入預計出貨時間（例如：2月上旬、3月中旬、4月下旬）：');
+                if (shippingTime) {
+                    order.notes = `預計出貨時間：${shippingTime}`;
                 }
             }
+            
+            // 更新狀態
+            order.status = newStatus;
+            
+            // 🔴 關鍵：正確更新頁面
+            renderOrdersTable();
+            
+            // 關閉彈窗
+            const modal = bootstrap.Modal.getInstance(document.getElementById('orderDetailModal'));
+            if (modal) {
+                modal.hide();
+            }
+            
+            // 顯示成功訊息
+            const statusText = {
+                'unpaid': '未購買',
+                'paid': '已購買',
+                'outofstock': '缺貨',
+                'shipping': '預計出貨'
+            };
+            
+            showToast(`訂單 ${orderId} 狀態已更新為：${statusText[newStatus]}`, 'success');
+            logActivity(currentUser, '訂單狀態更新', `${orderId}: ${oldStatus} → ${newStatus}`);
         }
 
         // 通知客戶
