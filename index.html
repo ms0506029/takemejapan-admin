@@ -1566,7 +1566,7 @@
                 { value: 'unpaid', text: '未購買', description: '商品尚未到貨' },
                 { value: 'paid', text: '已購買', description: '商品已到貨可出貨' }, 
                 { value: 'outofstock', text: '缺貨', description: '商品暫時缺貨' },
-                { value: 'shipping', text: '預計出貨', description: '預計X月上中下旬出貨' }
+                { value: 'shipping', text: '預計出貨', description: '點選後可設定具體時間' }
             ];
             
             // 建立選單 HTML
@@ -1612,9 +1612,14 @@
             
             // 特殊處理預計出貨
             if (newStatus === 'shipping') {
-                const shippingTime = prompt('請輸入預計出貨時間（例如：2月上旬、3月中旬、4月下旬）：');
-                if (shippingTime) {
-                    order.notes = `預計出貨時間：${shippingTime}`;
+                const shippingTime = prompt('請輸入預計出貨時間：\n例如：2月上旬、3月中旬、4月下旬\n或：1-2週內出貨');
+                if (shippingTime && shippingTime.trim()) {
+                    order.notes = `預計出貨時間：${shippingTime.trim()}`;
+                    // 更新狀態顯示
+                    order.shippingTime = shippingTime.trim();
+                } else {
+                    // 如果沒輸入就取消
+                    return;
                 }
             }
             
