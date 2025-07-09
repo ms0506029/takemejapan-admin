@@ -978,13 +978,25 @@
 
        
         // 替換整個函數
+        
         function extractProductNames(productInfoJson) {
             try {
                 if (!productInfoJson) return '0 項商品';
                 
                 const products = JSON.parse(productInfoJson);
                 if (Array.isArray(products) && products.length > 0) {
-                    return `${products.length} 項商品`;
+                    // ✅ 現在可以顯示實際商品名稱了
+                    const productNames = products.map(product => {
+                        // 優先使用商品名稱，其次是 SKU
+                        return product.name || product.product_title || product.sku || '未知商品';
+                    }).slice(0, 2); // 最多顯示前2個商品名稱
+                    
+                    const totalCount = products.length;
+                    if (totalCount > 2) {
+                        return `${productNames.join('、')} 等${totalCount}項商品`;
+                    } else {
+                        return productNames.join('、');
+                    }
                 }
                 return '0 項商品';
             } catch (error) {
@@ -1410,26 +1422,25 @@
             
             
             // 解析商品資訊
-            let productList = '';
+        
             try {
-                // 🔴 修正：productInfo 已經是字串，直接解析
                 const productInfoStr = order.productInfo || '[]';
                 const products = JSON.parse(productInfoStr);
                 
                 if (Array.isArray(products) && products.length > 0) {
                     productList = products.map(product => {
-                        // 🔴 改善商品名稱解析
-                        const productName = product.name || product.title || product.variant_title || 
+                        // 🔴 改善商品名稱顯示 - 現在有完整名稱了
+                        const productName = product.name || product.product_title || 
                                            (product.sku ? `商品 ${product.sku}` : '未知商品');
                         
                         return `
                             <tr>
-                                <td>${productName}</td>
-                            <td>${product.sku || product.variant_sku || '無SKU'}</td>
-                            <td>${product.quantity || 1}</td>
-                            <td>NT$ ${(product.price || 0).toLocaleString()}</td>
-                            <td>NT$ ${((product.price || 0) * (product.quantity || 1)).toLocaleString()}</td>
-                        </tr>
+                                <td style="font-weight: 600;">${productName}</td>
+                                <td>${product.sku || product.variant_sku || '無SKU'}</td>
+                                <td>${product.quantity || 1}</td>
+                                <td>NT$ ${(product.price || 0).toLocaleString()}</td>
+                                <td>NT$ ${((product.price || 0) * (product.quantity || 1)).toLocaleString()}</td>
+                            </tr>
                         `;
                     }).join('');
                 } else {
