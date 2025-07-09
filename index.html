@@ -1113,7 +1113,7 @@
                 </td>
                 <td>
                     <strong>
-                        <a href="#" onclick="showOrderDetail('${order.id}')" style="color: var(--primary-color); text-decoration: none;">
+                        <a href="#" onclick="showOrderDetail('${order.id}'); return false;" style="color: var(--primary-color); text-decoration: none;">
                             ${order.id}
                         </a>
                     </strong>
@@ -1153,6 +1153,7 @@
             
             document.getElementById('loginForm').addEventListener('submit', handleLogin);
             
+            // 側邊欄導航
             document.querySelectorAll('.sidebar-menu .nav-link').forEach(link => {
                 link.addEventListener('click', function(e) {
                     e.preventDefault();
@@ -1163,12 +1164,16 @@
                     this.classList.add('active');
                 });
             });
-
+        
+            // 🔴 這裡是關鍵：確保篩選事件正確綁定
             ['statusFilter', 'dateFrom', 'dateTo', 'searchInput'].forEach(id => {
                 const element = document.getElementById(id);
                 if (element) {
                     element.addEventListener('change', filterOrders);
                     element.addEventListener('input', filterOrders);
+                    console.log(`✅ ${id} 事件已綁定`);
+                } else {
+                    console.log(`❌ ${id} 元素不存在`);
                 }
             });
         });
@@ -1321,30 +1326,67 @@
             }
         }
 
+        
         // 過濾訂單
         function filterOrders() {
-            const status = document.getElementById('statusFilter').value;
-            const dateFrom = document.getElementById('dateFrom').value;
-            const dateTo = document.getElementById('dateTo').value;
-            const search = document.getElementById('searchInput').value.toLowerCase();
+            const status = document.getElementById('statusFilter')?.value || '';
+            const dateFrom = document.getElementById('dateFrom')?.value || '';
+            const dateTo = document.getElementById('dateTo')?.value || '';
+            const search = document.getElementById('searchInput')?.value?.toLowerCase() || '';
+            
+            console.log('篩選條件:', { status, dateFrom, dateTo, search });
             
             const filteredData = ordersData.filter(order => {
+                // 狀態篩選
                 const statusMatch = !status || order.status === status;
-                const searchMatch = !search || 
-                    order.id.toLowerCase().includes(search) || 
-                    order.customer.toLowerCase().includes(search) ||
-                    order.product.toLowerCase().includes(search);
                 
-                return statusMatch && searchMatch;
+                // 搜尋篩選
+                const searchMatch = !search || 
+                    order.id.toString().toLowerCase().includes(search) || 
+                    order.customer.toLowerCase().includes(search);
+                
+                // 日期篩選
+                let dateMatch = true;
+                if (dateFrom || dateTo) {
+                    const orderDate = new Date(order.orderTime);
+                    if (isNaN(orderDate.getTime())) {
+                        dateMatch = false; // 無效日期排除
+                    } else {
+                        const orderDateStr = orderDate.toISOString().split('T')[0]; // YYYY-MM-DD
+                        
+                        if (dateFrom && orderDateStr < dateFrom) {
+                            dateMatch = false;
+                        }
+                        if (dateTo && orderDateStr > dateTo) {
+                            dateMatch = false;
+                        }
+                    }
+                }
+                
+                return statusMatch && searchMatch && dateMatch;
             });
             
+            console.log(`篩選結果: ${filteredData.length}/${ordersData.length}`);
+            
+            // 更新表格
             const tbody = document.getElementById('ordersTableBody');
             tbody.innerHTML = '';
             
-            filteredData.forEach(order => {
-                const row = createOrderRow(order);
-                tbody.appendChild(row);
-            });
+            if (filteredData.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="text-center py-4">
+                            <i class="fas fa-search fa-2x text-muted mb-2"></i>
+                            <div class="text-muted">沒有符合條件的訂單</div>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                filteredData.forEach(order => {
+                    const row = createOrderRow(order);
+                    tbody.appendChild(row);
+                });
+            }
             
             showToast(`已篩選出 ${filteredData.length} 筆訂單`, 'info');
         }
