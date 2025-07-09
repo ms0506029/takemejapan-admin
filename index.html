@@ -585,6 +585,11 @@
                                     <button class="btn btn-outline-info w-100" onclick="exportData()">
                                         <i class="fas fa-download me-2"></i>匯出報表
                                     </button>
+                                    <div class="col-md-4 mb-3">
+                                    <button class="btn btn-outline-danger w-100" onclick="clearCache()">
+                                        <i class="fas fa-trash me-2"></i>清除快取重新載入
+                                    </button>
+                                </div>
                                 </div>
                             </div>
                         </div>
@@ -888,7 +893,20 @@
         // 載入訂單資料
         async function loadOrdersDataFromAPI() {
             try {
+                
+                // 檢查本地快取
+                const cachedOrders = localStorage.getItem('ordersData');
+                const cacheTime = localStorage.getItem('ordersDataTime');
+                if (cachedOrders && cacheTime) {
+                    ordersData = JSON.parse(cachedOrders);
+                    console.log(`從快取載入 ${ordersData.length} 筆訂單`);
+                    renderOrdersTable();
+                    updateDashboardStats();
+                    showToast(`從快取載入 ${ordersData.length} 筆訂單`, 'info');
+                    return; // 使用快取，不重新載入
+                }
                 showToast('正在載入訂單資料...', 'info');
+                
                 
                 const result = await apiRequest('', {
                     method: 'GET',
@@ -915,20 +933,24 @@
                 if (result.success) {
                     const orders = result.data || result || [];
                     ordersData = orders.map(order => ({
-                        id: order.orderNumber,
-                        customer: order.customerName || '未知客戶',
-                        product: extractProductNames(order.productInfo),
-                        amount: parseFloat(order.orderAmount) || 0,
-                        status: mapOrderStatus(order.orderStatus),
-                        shipping: order.orderStatus === '預計出貨' ? '待確認' : formatDate(order.orderTime),
-                        lineUserId: order.lineUserId || null,
-                        email: order.customerEmail,
-                        phone: order.customerPhone,
-                        paymentStatus: order.paymentStatus,
-                        notes: order.notes,
-                        lastUpdatedBy: order.lastUpdatedBy,
-                        lastUpdatedTime: order.lastUpdatedTime
-                    }));
+                    id: order.orderNumber,
+                    customer: order.customerName || '未知客戶',
+                    product: extractProductNames(order.productInfo),
+                    amount: parseFloat(order.orderAmount) || 0,
+                    status: 'unpaid', // 預設為未購買
+                    orderTime: order.orderTime, // 保留原始時間
+                    email: order.customerEmail,
+                    phone: order.customerPhone,
+                    address: order.address,
+                    productInfo: order.productInfo,
+                    paymentStatus: order.paymentStatus,
+                    notes: order.notes,
+                    shipping: order.shipping || 0,
+                    discount: order.discount || 0
+                }));
+                
+                // 按照下單時間排序（最新在上）
+                ordersData.sort((a, b) => new Date(b.orderTime) - new Date(a.orderTime));
                     
                     console.log('訂單資料載入成功:', ordersData.length, '筆訂單');
                     renderOrdersTable();
@@ -936,6 +958,12 @@
                     showToast(`成功載入 ${ordersData.length} 筆訂單`, 'success');
                 } else {
                     throw new Error(result.error || '載入訂單資料失敗');
+                }
+                // 成功載入後儲存到快取
+                if (ordersData.length > 0) {
+                    localStorage.setItem('ordersData', JSON.stringify(ordersData));
+                    localStorage.setItem('ordersDataTime', new Date().toISOString());
+                    console.log('訂單資料已儲存到快取');
                 }
                 
             } catch (error) {
@@ -980,15 +1008,27 @@
         // 格式化日期顯示
         function formatDate(dateString) {
             try {
-                if (!dateString) return '未知日期';
+                if (!dateString || dateString === 'undefined' || dateString === 'null') {
+                    return '未知日期';
+                }
+                
                 const date = new Date(dateString);
+                
+                // 檢查日期是否有效
+                if (isNaN(date.getTime())) {
+                    return '日期格式錯誤';
+                }
+                
                 return date.toLocaleDateString('zh-TW', {
                     year: 'numeric',
                     month: '2-digit',
-                    day: '2-digit'
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
                 });
             } catch (error) {
-                return '日期格式錯誤';
+                console.error('日期格式化錯誤:', error);
+                return '日期解析錯誤';
             }
         }
 
@@ -1086,7 +1126,7 @@
                         ${statusText[order.status]}
                     </span>
                 </td>
-                <td>${formatDate(order.orderTime) || '未知日期'}</td>
+                <td>${formatDate(order.orderTime)}</td>
                 <td>
                     <div class="btn-group btn-group-sm">
                         <button class="action-btn btn-edit" onclick="editOrder('${order.id}')" title="編輯">
@@ -1571,6 +1611,22 @@
                 showToast('資料匯出完成', 'success');
                 logActivity(currentUser, '資料匯出', '匯出訂單資料為 CSV');
             }, 1000);
+        }
+
+        // 清除快取並重新載入
+        function clearCache() {
+            if (confirm('確定要清除快取並重新載入訂單資料嗎？')) {
+                localStorage.removeItem('ordersData');
+                localStorage.removeItem('ordersDataTime');
+                ordersData = [];
+                renderOrdersTable();
+                showToast('快取已清除', 'success');
+                
+                // 重新載入
+                setTimeout(() => {
+                    loadOrdersDataFromAPI();
+                }, 500);
+            }
         }
 
         // 顯示 Toast 通知
