@@ -933,21 +933,22 @@
                 if (result.success) {
                     const orders = result.data || result || [];
                     ordersData = orders.map(order => ({
-                    id: order.orderNumber,
-                    customer: order.customerName || '未知客戶',
-                    product: extractProductNames(order.productInfo),
-                    amount: parseFloat(order.orderAmount) || 0,
-                    status: 'unpaid', // 預設為未購買
-                    orderTime: order.orderTime, // 保留原始時間
-                    email: order.customerEmail,
-                    phone: order.customerPhone,
-                    address: order.address,
-                    productInfo: order.productInfo,
-                    paymentStatus: order.paymentStatus,
-                    notes: order.notes,
-                    shipping: order.shipping || 0,
-                    discount: order.discount || 0
-                }));
+                        id: order.orderNumber,
+                        customer: order.customerName || '未知客戶',
+                        product: extractProductNames(order.productInfo),
+                        amount: parseFloat(order.orderAmount) || 0,
+                        status: 'unpaid',
+                        orderTime: order.orderTime,
+                        // 🔴 關鍵：確保所有欄位都有值
+                        email: order.customerEmail || '',
+                        phone: order.customerPhone || '',
+                        address: order.address || '{}',
+                        productInfo: order.productInfo || '[]',
+                        paymentStatus: order.paymentStatus || 'paid',
+                        notes: order.notes || '',
+                        shipping: order.shipping || 0,
+                        discount: order.discount || 0
+                    }));
                 
                 // 按照下單時間排序（最新在上）
                 ordersData.sort((a, b) => new Date(b.orderTime) - new Date(a.orderTime));
