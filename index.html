@@ -914,7 +914,7 @@
             orderIds.forEach(orderId => {
                 const order = ordersData.find(o => o.id == orderId);
                 if (order) {
-                    order.status = 'shipping';
+                    order.status = 'shipped_to_taiwan'; 
                     order.notes = `追蹤號碼：${trackingNumber}，寄送日期：${shippingDate}`;
                     order.trackingNumber = trackingNumber;
                     order.shippingDate = shippingDate;
@@ -1308,6 +1308,7 @@
                 'paid': 'status-paid', 
                 'outofstock': 'status-outofstock',
                 'shipping': 'status-shipping'
+                'shipped_to_taiwan': 'status-shipped'
             };
             
             // 🔴 改善狀態文字顯示
@@ -1730,6 +1731,7 @@
                 'paid': '已購買',
                 'outofstock': '缺貨',
                 'shipping': '預計出貨'
+                'shipped_to_taiwan': '已出貨回台中'
             };
             
             const content = `
@@ -1896,7 +1898,7 @@
                     'unpaid': '未購買',
                     'paid': '已購買',
                     'outofstock': '缺貨',
-                    'shipping': shippingTime ? `預計${shippingTime}出貨` : '預計出貨'
+                    'shipping': shippingTime ? `日本官方預計${shippingTime}出貨` : '預計出貨'
                 };
                 
                 showToast(`✅ 訂單 ${orderId} 狀態已更新為：${statusText[newStatus]}`, 'success');
