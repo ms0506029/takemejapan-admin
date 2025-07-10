@@ -2038,12 +2038,13 @@
             
             // 🔴 新增：即時提示狀態變更
             const statusText = getStatusText(newStatus);
+            // 更新本地資料
+            updateProductStatus(orderId, productIndex, newStatus);
             showToast(`商品 ${parseInt(productIndex) + 1} 狀態已設為：${statusText}`, 'info');
         });
             
-            // 更新本地資料
-            updateProductStatus(orderId, productIndex, newStatus);
-        });
+            
+      
         
         // 🔴 新增：出貨時間變更處理
         $(document).on('blur', '.shipping-time-input', function() {
