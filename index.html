@@ -947,7 +947,7 @@
                         customer: order.customerName || '未知客戶',
                         product: extractProductNames(order.productInfo),
                         amount: parseFloat(order.orderAmount) || 0,
-                        status: 'unpaid',
+                        status: order.orderStatus || 'unpaid',  // ✅ 使用 API 回傳的狀態
                         orderTime: order.orderTime,
                         // 🔴 關鍵：確保所有欄位都有值
                         email: order.customerEmail || '',
