@@ -2010,52 +2010,58 @@
                 timeElement.textContent = timeString;
             }
         }
-        // 🔴 新增：商品狀態變更處理函數
-        $(document).on('change', '.product-status-select', function() {
-            const productIndex = $(this).data('product-index');
-            const orderId = $(this).data('order-id');
-            const newStatus = $(this).val();
-            const row = $(this).closest('tr');
-            
-            // 移除現有的出貨時間輸入框
-            row.find('.shipping-time-input').remove();
-            
-            // 如果選擇預計出貨，顯示時間輸入框
-            if (newStatus === 'shipping') {
-                const timeInput = `
-                    <input type="text" 
-                           class="form-control form-control-sm mt-1 shipping-time-input"
-                           data-product-index="${productIndex}"
-                           placeholder="例如：2月上旬"
-                           style="font-size: 0.8rem;">
-                `;
-                $(this).after(timeInput);
-                // 自動聚焦到輸入框
-                setTimeout(() => {
-                    row.find('.shipping-time-input').focus();
-                }, 100);
-            }
-            
-            // 🔴 新增：即時提示狀態變更
-            const statusText = getStatusText(newStatus);
-            // 更新本地資料
-            updateProductStatus(orderId, productIndex, newStatus);
-            showToast(`商品 ${parseInt(productIndex) + 1} 狀態已設為：${statusText}`, 'info');
-        });
-            
-            
-      
         
-        // 🔴 新增：出貨時間變更處理
-        $(document).on('blur', '.shipping-time-input', function() {
-            const productIndex = $(this).data('product-index');
-            const orderId = $(this).closest('tr').find('.product-status-select').data('order-id');
-            const shippingTime = $(this).val().trim();
-            
-            if (shippingTime) {
-                updateProductShippingTime(orderId, productIndex, shippingTime);
+        // ✅ 原生 JavaScript 版本
+        document.addEventListener('change', function(e) {
+            if (e.target.classList.contains('product-status-select')) {
+                const productIndex = e.target.getAttribute('data-product-index');
+                const orderId = e.target.getAttribute('data-order-id');
+                const newStatus = e.target.value;
+                const row = e.target.closest('tr');
+                
+                // 移除現有的出貨時間輸入框
+                const existingInput = row.querySelector('.shipping-time-input');
+                if (existingInput) {
+                    existingInput.remove();
+                }
+                
+                // 如果選擇預計出貨，顯示時間輸入框
+                if (newStatus === 'shipping') {
+                    const timeInput = document.createElement('input');
+                    timeInput.type = 'text';
+                    timeInput.className = 'form-control form-control-sm mt-1 shipping-time-input';
+                    timeInput.setAttribute('data-product-index', productIndex);
+                    timeInput.placeholder = '例如：2月上旬';
+                    timeInput.style.fontSize = '0.8rem';
+                    
+                    // 插入到下拉選單後面
+                    e.target.parentNode.insertBefore(timeInput, e.target.nextSibling);
+                    
+                    // 自動聚焦到輸入框
+                    setTimeout(() => {
+                        timeInput.focus();
+                    }, 100);
+                }
+                
+                // 即時提示狀態變更
+                const statusText = getStatusText(newStatus);
+                showToast(`商品 ${parseInt(productIndex) + 1} 狀態已設為：${statusText}`, 'info');
             }
         });
+        
+        // ✅ 出貨時間變更處理（原生 JavaScript）
+        document.addEventListener('blur', function(e) {
+            if (e.target.classList.contains('shipping-time-input')) {
+                const productIndex = e.target.getAttribute('data-product-index');
+                const selectElement = document.querySelector(`[data-product-index="${productIndex}"].product-status-select`);
+                const orderId = selectElement ? selectElement.getAttribute('data-order-id') : null;
+                const shippingTime = e.target.value.trim();
+                
+                if (shippingTime && orderId) {
+                    updateProductShippingTime(orderId, productIndex, shippingTime);
+                }
+            }
+        }, true);
         
         // 🔴 新增：更新商品狀態函數
         function updateProductStatus(orderId, productIndex, newStatus) {
