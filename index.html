@@ -994,24 +994,16 @@
        
         // 替換整個函數
         
+        // 🔴 完整替換 extractProductNames 函數
         function extractProductNames(productInfoJson) {
             try {
                 if (!productInfoJson) return '0 項商品';
                 
                 const products = JSON.parse(productInfoJson);
                 if (Array.isArray(products) && products.length > 0) {
-                    // ✅ 現在可以顯示實際商品名稱了
-                    const productNames = products.map(product => {
-                        // 優先使用商品名稱，其次是 SKU
-                        return product.name || product.product_title || product.sku || '未知商品';
-                    }).slice(0, 2); // 最多顯示前2個商品名稱
-                    
+                    // ✅ 只顯示商品數量，不顯示名稱
                     const totalCount = products.length;
-                    if (totalCount > 2) {
-                        return `${productNames.join('、')} 等${totalCount}項商品`;
-                    } else {
-                        return productNames.join('、');
-                    }
+                    return `${totalCount} 項商品`;
                 }
                 return '0 項商品';
             } catch (error) {
@@ -1286,14 +1278,24 @@
         }
 
         // 顯示後台儀表板
+        // 🔴 找到 showDashboard 函數並替換為：
         async function showDashboard() {
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('adminDashboard').style.display = 'block';
             
             document.getElementById('currentUser').textContent = currentUser;
             
+            // 🔴 修改：先載入統計，再強制重新載入訂單（不使用快取）
+            showToast('正在載入管理介面...', 'info');
+            
+            // 清除舊快取，確保載入最新資料
+            localStorage.removeItem('ordersData');
+            localStorage.removeItem('ordersDataTime');
+            
             await loadStatsData();
             await loadOrdersDataFromAPI();
+            
+            showToast('✅ 管理介面載入完成', 'success');
         }
 
         // 登出
@@ -1444,23 +1446,59 @@
             
             // 解析商品資訊
         
+            // 🔴 在 showOrderDetail 函數中，找到商品資訊解析部分並替換：
             try {
                 const productInfoStr = order.productInfo || '[]';
                 const products = JSON.parse(productInfoStr);
                 
                 if (Array.isArray(products) && products.length > 0) {
-                    productList = products.map(product => {
-                        // 🔴 改善商品名稱顯示 - 現在有完整名稱了
+                    productList = products.map((product, index) => {
                         const productName = product.name || product.product_title || 
                                            (product.sku ? `商品 ${product.sku}` : '未知商品');
                         
+                        // 🔴 新增：為每個商品加入狀態選擇器
+                        const productStatusOptions = [
+                            { value: 'unpaid', text: '未購買', color: '#ffeaa7' },
+                            { value: 'paid', text: '已購買', color: '#00b894' },
+                            { value: 'outofstock', text: '缺貨', color: '#e17055' },
+                            { value: 'shipping', text: '預計出貨', color: '#74b9ff' }
+                        ];
+                        
+                        const currentProductStatus = product.status || 'unpaid';
+                        
                         return `
                             <tr>
-                                <td style="font-weight: 600;">${productName}</td>
-                                <td>${product.sku || product.variant_sku || '無SKU'}</td>
-                                <td>${product.quantity || 1}</td>
-                                <td>NT$ ${(product.price || 0).toLocaleString()}</td>
-                                <td>NT$ ${((product.price || 0) * (product.quantity || 1)).toLocaleString()}</td>
+                                <td style="font-weight: 600; vertical-align: middle;">
+                                    ${productName}
+                                    <br>
+                                    <small class="text-muted">SKU: ${product.sku || '無'}</small>
+                                </td>
+                                <td style="vertical-align: middle;">${product.quantity || 1}</td>
+                                <td style="vertical-align: middle;">NT$ ${(product.price || 0).toLocaleString()}</td>
+                                <td style="vertical-align: middle;">NT$ ${((product.price || 0) * (product.quantity || 1)).toLocaleString()}</td>
+                                <td style="vertical-align: middle;">
+                                    <select class="form-select form-select-sm product-status-select" 
+                                            data-product-index="${index}" 
+                                            data-order-id="${order.id}"
+                                            style="min-width: 120px;">
+                                        ${productStatusOptions.map(option => `
+                                            <option value="${option.value}" 
+                                                    ${currentProductStatus === option.value ? 'selected' : ''}
+                                                    data-color="${option.color}">
+                                                ${option.text}
+                                            </option>
+                                        `).join('')}
+                                    </select>
+                                    
+                                    ${currentProductStatus === 'shipping' ? `
+                                        <input type="text" 
+                                               class="form-control form-control-sm mt-1 shipping-time-input"
+                                               data-product-index="${index}"
+                                               placeholder="例如：2月上旬"
+                                               value="${product.shippingTime || ''}"
+                                               style="font-size: 0.8rem;">
+                                    ` : ''}
+                                </td>
                             </tr>
                         `;
                     }).join('');
@@ -1533,14 +1571,15 @@
                 
                 <h6 class="text-primary"><i class="fas fa-shopping-cart me-2"></i>商品明細</h6>
                 <div class="table-responsive">
+                    // 🔴 找到商品表格標題並替換為：
                     <table class="table table-striped">
                         <thead class="table-dark">
                             <tr>
                                 <th>商品名稱</th>
-                                <th>SKU</th>
                                 <th>數量</th>
                                 <th>單價</th>
                                 <th>小計</th>
+                                <th>狀態管理</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1901,6 +1940,89 @@
             if (timeElement) {
                 timeElement.textContent = timeString;
             }
+        }
+        // 🔴 新增：商品狀態變更處理函數
+        $(document).on('change', '.product-status-select', function() {
+            const productIndex = $(this).data('product-index');
+            const orderId = $(this).data('order-id');
+            const newStatus = $(this).val();
+            const row = $(this).closest('tr');
+            
+            // 移除現有的出貨時間輸入框
+            row.find('.shipping-time-input').remove();
+            
+            // 如果選擇預計出貨，顯示時間輸入框
+            if (newStatus === 'shipping') {
+                const timeInput = `
+                    <input type="text" 
+                           class="form-control form-control-sm mt-1 shipping-time-input"
+                           data-product-index="${productIndex}"
+                           placeholder="例如：2月上旬"
+                           style="font-size: 0.8rem;">
+                `;
+                $(this).after(timeInput);
+            }
+            
+            // 更新本地資料
+            updateProductStatus(orderId, productIndex, newStatus);
+        });
+        
+        // 🔴 新增：出貨時間變更處理
+        $(document).on('blur', '.shipping-time-input', function() {
+            const productIndex = $(this).data('product-index');
+            const orderId = $(this).closest('tr').find('.product-status-select').data('order-id');
+            const shippingTime = $(this).val().trim();
+            
+            if (shippingTime) {
+                updateProductShippingTime(orderId, productIndex, shippingTime);
+            }
+        });
+        
+        // 🔴 新增：更新商品狀態函數
+        function updateProductStatus(orderId, productIndex, newStatus) {
+            const order = ordersData.find(o => o.id == orderId);
+            if (!order) return;
+            
+            try {
+                const products = JSON.parse(order.productInfo);
+                if (products[productIndex]) {
+                    products[productIndex].status = newStatus;
+                    order.productInfo = JSON.stringify(products);
+                    
+                    showToast(`✅ 商品 ${productIndex + 1} 狀態已更新為：${getStatusText(newStatus)}`, 'success');
+                }
+            } catch (error) {
+                console.error('更新商品狀態失敗:', error);
+            }
+        }
+        
+        // 🔴 新增：更新出貨時間函數
+        function updateProductShippingTime(orderId, productIndex, shippingTime) {
+            const order = ordersData.find(o => o.id == orderId);
+            if (!order) return;
+            
+            try {
+                const products = JSON.parse(order.productInfo);
+                if (products[productIndex]) {
+                    products[productIndex].shippingTime = shippingTime;
+                    order.productInfo = JSON.stringify(products);
+                    
+                    showToast(`✅ 商品 ${productIndex + 1} 出貨時間已設定為：${shippingTime}`, 'success');
+                }
+            } catch (error) {
+                console.error('更新出貨時間失敗:', error);
+            }
+        }
+        
+        // 🔴 新增：狀態文字轉換函數
+        function getStatusText(status) {
+            const statusMap = {
+                'unpaid': '未購買',
+                'paid': '已購買',
+                'outofstock': '缺貨',
+                'shipping': '預計出貨'
+            };
+            return statusMap[status] || status;
         }
 
         // 全選功能
