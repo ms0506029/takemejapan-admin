@@ -893,24 +893,34 @@
         // 載入訂單資料
         async function loadOrdersDataFromAPI() {
             try {
+                // 🔴 修改：檢查是否強制重新載入
+                const forceReload = window.forceReloadOrders || false;
+                window.forceReloadOrders = false; // 重置標記
                 
-                // 檢查本地快取
-                const cachedOrders = localStorage.getItem('ordersData');
-                const cacheTime = localStorage.getItem('ordersDataTime');
-                if (cachedOrders && cacheTime) {
-                    ordersData = JSON.parse(cachedOrders);
-                    console.log(`從快取載入 ${ordersData.length} 筆訂單`);
-                    renderOrdersTable();
-                    updateDashboardStats();
-                    showToast(`從快取載入 ${ordersData.length} 筆訂單`, 'info');
-                    return; // 使用快取，不重新載入
+                // 檢查本地快取（但允許強制重新載入）
+                if (!forceReload) {
+                    const cachedOrders = localStorage.getItem('ordersData');
+                    const cacheTime = localStorage.getItem('ordersDataTime');
+                    const cacheMaxAge = 5 * 60 * 1000; // 5分鐘快取
+                    
+                    if (cachedOrders && cacheTime) {
+                        const isExpired = (Date.now() - parseInt(cacheTime)) > cacheMaxAge;
+                        if (!isExpired) {
+                            ordersData = JSON.parse(cachedOrders);
+                            console.log(`從快取載入 ${ordersData.length} 筆訂單`);
+                            renderOrdersTable();
+                            updateDashboardStats();
+                            showToast(`從快取載入 ${ordersData.length} 筆訂單`, 'info');
+                            return;
+                        }
+                    }
                 }
-                showToast('正在載入訂單資料...', 'info');
                 
+                showToast('正在同步最新訂單資料...', 'info');
                 
                 const result = await apiRequest('', {
                     method: 'GET',
-                    params: { action: 'getOrders' }
+                    params: { action: 'getOrders', timestamp: Date.now() } // 🔴 加入時間戳避免快取
                 });
 
                 // 檢查回應格式
@@ -963,18 +973,23 @@
                 // 成功載入後儲存到快取
                 if (ordersData.length > 0) {
                     localStorage.setItem('ordersData', JSON.stringify(ordersData));
-                    localStorage.setItem('ordersDataTime', new Date().toISOString());
-                    console.log('訂單資料已儲存到快取');
+                    localStorage.setItem('ordersDataTime', Date.now().toString());
+                    console.log('訂單資料已更新快取');
                 }
                 
             } catch (error) {
                 console.error('載入訂單資料失敗:', error);
                 showToast('載入訂單資料失敗', 'error');
-                
                 ordersData = [];
                 renderOrdersTable();
             }
         }
+        
+        // 🔴 新增：強制重新載入函數
+        window.forceReloadOrders = function() {
+            window.forceReloadOrders = true;
+            loadOrdersDataFromAPI();
+        };
 
        
         // 替換整個函數
@@ -1103,6 +1118,7 @@
         }
 
         // 建立訂單行
+        // 🔴 在 createOrderRow 函數中修改狀態顯示部分
         function createOrderRow(order) {
             const row = document.createElement('tr');
             
@@ -1113,12 +1129,28 @@
                 'shipping': 'status-shipping'
             };
             
-            const statusText = {
-                'unpaid': '未購買',
-                'paid': '已購買',
-                'outofstock': '缺貨',
-                'shipping': '預計出貨'
+            // 🔴 改善狀態文字顯示
+            const getStatusText = (status, notes, shippingTime) => {
+                switch(status) {
+                    case 'unpaid': return '未購買';
+                    case 'paid': return '已購買';
+                    case 'outofstock': return '缺貨';
+                    case 'shipping':
+                        // 🔴 處理預計出貨時間顯示
+                        if (shippingTime) {
+                            return `預計${shippingTime}出貨`;
+                        } else if (notes && notes.includes('預計出貨時間：')) {
+                            const timeMatch = notes.match(/預計出貨時間：(.+)/);
+                            if (timeMatch) {
+                                return `預計${timeMatch[1]}出貨`;
+                            }
+                        }
+                        return '預計出貨';
+                    default: return status;
+                }
             };
+            
+            const statusText = getStatusText(order.status, order.notes, order.shippingTime);
             
             row.innerHTML = `
                 <td>
@@ -1136,7 +1168,7 @@
                 <td>NT$ ${order.amount.toLocaleString()}</td>
                 <td>
                     <span class="status-badge ${statusClass[order.status]}">
-                        ${statusText[order.status]}
+                        ${statusText}
                     </span>
                 </td>
                 <td>${formatDate(order.orderTime)}</td>
@@ -1298,9 +1330,10 @@
         }
 
         // 同步 EasyStore 資料
+        // 🔴 修改 refreshData 函數
         async function refreshData() {
             try {
-                showToast('正在同步 EasyStore 資料...', 'info');
+                showToast('正在同步最新資料...', 'info');
                 
                 const refreshBtn = document.querySelector('button[onclick="refreshData()"]');
                 if (refreshBtn) {
@@ -1308,34 +1341,22 @@
                     refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>同步中...';
                     refreshBtn.disabled = true;
                     
-                    setTimeout(() => {
-                        refreshBtn.innerHTML = originalText;
-                        refreshBtn.disabled = false;
-                    }, 10000);
-                }
-                
-                const result = await apiRequest('', {
-                    method: 'GET',
-                    params: { 
-                        action: 'syncOrders',
-                        days: 5,
-                        operator: currentUser
-                    }
-                });
-                
-                if (result.success) {
-                    showToast(`同步完成：新增 ${result.newOrders || 0} 筆，跳過 ${result.skippedOrders || 0} 筆`, 'success');
-                    logActivity(currentUser, '資料同步', `EasyStore 資料同步完成`);
+                    // 🔴 清除快取，強制重新載入
+                    localStorage.removeItem('ordersData');
+                    localStorage.removeItem('ordersDataTime');
                     
+                    // 重新載入資料
                     await loadOrdersDataFromAPI();
-                    await loadStatsData();
-                } else {
-                    throw new Error(result.error || result.message || '同步失敗');
+                    
+                    refreshBtn.innerHTML = originalText;
+                    refreshBtn.disabled = false;
                 }
+                
+                showToast('✅ 資料同步完成', 'success');
                 
             } catch (error) {
                 console.error('同步資料失敗:', error);
-                showToast(`同步失敗: ${error.message}`, 'error');
+                showToast(`❌ 同步失敗: ${error.message}`, 'error');
             }
         }
 
@@ -1607,9 +1628,45 @@
             
             document.getElementById('orderDetailContent').innerHTML = currentContent + selectHtml;
         }
+        // 🔴 新增：同步狀態變更到後端
+        async function syncOrderStatusToBackend(orderId, newStatus, shippingTime = '') {
+            try {
+                showToast('正在儲存狀態變更...', 'info');
+                
+                const result = await apiRequest('', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'updateOrderStatus',
+                        orderId: orderId,
+                        newStatus: newStatus,
+                        shippingTime: shippingTime,
+                        operator: currentUser,
+                        timestamp: new Date().toISOString()
+                    })
+                });
+                
+                if (result.success) {
+                    showToast('✅ 狀態已成功儲存', 'success');
+                    // 🔴 清除快取，強制下次重新載入
+                    localStorage.removeItem('ordersData');
+                    localStorage.removeItem('ordersDataTime');
+                    return true;
+                } else {
+                    showToast('❌ 儲存失敗：' + (result.error || '未知錯誤'), 'error');
+                    return false;
+                }
+                
+            } catch (error) {
+                console.error('同步狀態失敗:', error);
+                showToast('❌ 網路錯誤，狀態可能未儲存', 'error');
+                return false;
+            }
+        }
+        
         
         // 新增：實際更新狀態的函數
-        function updateOrderStatus() {
+        // 🔴 完整替換現有的 updateOrderStatus 函數
+        async function updateOrderStatus() {
             const orderId = window.currentOrderId;
             const newStatusSelect = document.getElementById('newOrderStatus');
             
@@ -1620,42 +1677,49 @@
             
             const newStatus = newStatusSelect.value;
             const oldStatus = order.status;
+            let shippingTime = '';
             
             // 特殊處理預計出貨
             if (newStatus === 'shipping') {
-                const shippingTime = prompt('請輸入預計出貨時間：\n例如：2月上旬、3月中旬、4月下旬\n或：1-2週內出貨');
-                if (shippingTime && shippingTime.trim()) {
-                    order.notes = `預計出貨時間：${shippingTime.trim()}`;
-                    // 更新狀態顯示
-                    order.shippingTime = shippingTime.trim();
-                } else {
-                    // 如果沒輸入就取消
+                shippingTime = prompt('請輸入預計出貨時間（例如：2月上旬、3月中旬、4月下旬）：');
+                if (!shippingTime || !shippingTime.trim()) {
+                    showToast('❌ 請輸入出貨時間', 'warning');
                     return;
                 }
+                shippingTime = shippingTime.trim();
             }
             
-            // 更新狀態
-            order.status = newStatus;
+            // 🔴 關鍵：先同步到後端
+            const syncSuccess = await syncOrderStatusToBackend(orderId, newStatus, shippingTime);
             
-            // 🔴 關鍵：正確更新頁面
-            renderOrdersTable();
-            
-            // 關閉彈窗
-            const modal = bootstrap.Modal.getInstance(document.getElementById('orderDetailModal'));
-            if (modal) {
-                modal.hide();
+            if (syncSuccess) {
+                // 更新本地資料
+                order.status = newStatus;
+                if (shippingTime) {
+                    order.notes = `預計出貨時間：${shippingTime}`;
+                    order.shippingTime = shippingTime;
+                }
+                
+                // 更新顯示
+                renderOrdersTable();
+                
+                // 關閉彈窗
+                const modal = bootstrap.Modal.getInstance(document.getElementById('orderDetailModal'));
+                if (modal) {
+                    modal.hide();
+                }
+                
+                // 顯示成功訊息（包含出貨時間）
+                const statusText = {
+                    'unpaid': '未購買',
+                    'paid': '已購買',
+                    'outofstock': '缺貨',
+                    'shipping': shippingTime ? `預計${shippingTime}出貨` : '預計出貨'
+                };
+                
+                showToast(`✅ 訂單 ${orderId} 狀態已更新為：${statusText[newStatus]}`, 'success');
+                logActivity(currentUser, '訂單狀態更新', `${orderId}: ${oldStatus} → ${newStatus}${shippingTime ? ` (${shippingTime})` : ''}`);
             }
-            
-            // 顯示成功訊息
-            const statusText = {
-                'unpaid': '未購買',
-                'paid': '已購買',
-                'outofstock': '缺貨',
-                'shipping': '預計出貨'
-            };
-            
-            showToast(`訂單 ${orderId} 狀態已更新為：${statusText[newStatus]}`, 'success');
-            logActivity(currentUser, '訂單狀態更新', `${orderId}: ${oldStatus} → ${newStatus}`);
         }
 
         // 通知客戶
