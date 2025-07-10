@@ -1629,15 +1629,13 @@
                 showToast('正在儲存狀態變更...', 'info');
                 
                 const result = await apiRequest('', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        action: 'updateOrderStatus',
-                        orderId: orderId,
-                        newStatus: newStatus,
-                        shippingTime: shippingTime,
-                        operator: currentUser,
-                        timestamp: new Date().toISOString()
-                    })
+                  params: {
+                    action: 'updateOrderStatusToGAS',
+                    orderId: orderId,
+                    newStatus: newStatus,
+                    shippingTime: shippingTime,
+                    operator: currentUser
+                  }
                 });
                 
                 if (result.success) {
