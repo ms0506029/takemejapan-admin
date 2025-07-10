@@ -626,16 +626,17 @@
                         </div>
                     </div>
 
-                    <!-- 批量操作 -->
+                   
+                    <!-- 擴展的批量操作區塊 -->
                     <div class="bulk-actions">
                         <div class="row align-items-center">
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="selectAll">
                                     <label class="form-check-label" for="selectAll">全選</label>
                                 </div>
                             </div>
-                            <div class="col-md-6 text-end">
+                            <div class="col-md-8 text-end">
                                 <div class="btn-group">
                                     <button class="btn btn-sm btn-outline-success" onclick="bulkUpdateStatus('paid')">
                                         批量標記已購買
@@ -643,8 +644,11 @@
                                     <button class="btn btn-sm btn-outline-warning" onclick="bulkUpdateStatus('shipping')">
                                         批量更新出貨狀態
                                     </button>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="showShippingModal()">
+                                        🚚 批量物流管理
+                                    </button>
                                     <button class="btn btn-sm btn-outline-info" onclick="bulkNotify()">
-                                        批量通知客戶
+                                        📱 批量 LINE 推播
                                     </button>
                                 </div>
                             </div>
@@ -739,6 +743,191 @@
             'hu123': 'admin',              // 一般管理員
             'jay123': 'admin'              // 一般管理員
         };
+
+        // 顯示物流管理彈窗
+        function showShippingModal() {
+            const checkedBoxes = document.querySelectorAll('.order-checkbox:checked');
+            
+            if (checkedBoxes.length === 0) {
+                showToast('請先選擇要處理的訂單', 'warning');
+                return;
+            }
+            
+            // 更新選中訂單列表
+            updateSelectedOrdersList(checkedBoxes);
+            
+            // 設定預設寄送日期為今天
+            document.getElementById('shippingDate').value = new Date().toISOString().split('T')[0];
+            
+            // 顯示彈窗
+            const modal = new bootstrap.Modal(document.getElementById('shippingModal'));
+            modal.show();
+        }
+        
+        // 更新選中訂單列表
+        function updateSelectedOrdersList(checkedBoxes) {
+            const ordersList = document.getElementById('selectedOrdersList');
+            const orderNumbers = Array.from(checkedBoxes).map(cb => {
+                const row = cb.closest('tr');
+                const orderNumber = row.cells[1].textContent.trim();
+                const customerName = row.cells[2].textContent.trim();
+                return `${orderNumber} (${customerName})`;
+            });
+            
+            ordersList.innerHTML = `
+                <strong>${orderNumbers.length} 筆訂單：</strong><br>
+                ${orderNumbers.join('<br>')}
+            `;
+        }
+        
+        // 監聽推播模板選擇
+        document.addEventListener('DOMContentLoaded', function() {
+            const pushTemplate = document.getElementById('pushTemplate');
+            const customMessageGroup = document.getElementById('customMessageGroup');
+            
+            if (pushTemplate) {
+                pushTemplate.addEventListener('change', function() {
+                    if (this.value === 'custom') {
+                        customMessageGroup.style.display = 'block';
+                    } else {
+                        customMessageGroup.style.display = 'none';
+                    }
+                    updatePushPreview();
+                });
+            }
+            
+            // 監聽追蹤號碼輸入
+            const trackingInput = document.getElementById('trackingNumber');
+            if (trackingInput) {
+                trackingInput.addEventListener('input', updatePushPreview);
+            }
+        });
+        
+        // 更新推播預覽
+        function updatePushPreview() {
+            const trackingNumber = document.getElementById('trackingNumber').value || '待輸入';
+            const template = document.getElementById('pushTemplate').value;
+            const customMessage = document.getElementById('customMessage').value;
+            const previewContent = document.getElementById('previewContent');
+            
+            let message = '';
+            
+            if (template === 'shipped') {
+                message = `您的商品已寄出回台灣<br>追蹤號碼：${trackingNumber}<br>點擊查看物流詳情`;
+            } else if (template === 'custom' && customMessage) {
+                message = customMessage.replace('{追蹤號碼}', trackingNumber);
+            } else {
+                message = '請選擇推播模板或輸入自訂訊息';
+            }
+            
+            previewContent.innerHTML = message;
+            document.getElementById('previewTracking').textContent = trackingNumber;
+        }
+        
+        // 執行物流更新和推播
+        async function executeShippingUpdate() {
+            try {
+                const checkedBoxes = document.querySelectorAll('.order-checkbox:checked');
+                const trackingNumber = document.getElementById('trackingNumber').value.trim();
+                const shippingDate = document.getElementById('shippingDate').value;
+                const enablePush = document.getElementById('enableLinePush').checked;
+                
+                // 驗證必要資料
+                if (!trackingNumber) {
+                    showToast('請輸入追蹤號碼', 'warning');
+                    return;
+                }
+                
+                if (!shippingDate) {
+                    showToast('請選擇寄送日期', 'warning');
+                    return;
+                }
+                
+                const orderIds = Array.from(checkedBoxes).map(cb => cb.value);
+                
+                showToast('正在處理物流更新...', 'info');
+                
+                // 準備更新資料
+                const updateData = {
+                    orderIds: orderIds,
+                    trackingNumber: trackingNumber,
+                    shippingDate: shippingDate,
+                    newStatus: '已寄出回台中',
+                    enableLinePush: enablePush,
+                    pushTemplate: document.getElementById('pushTemplate').value,
+                    customMessage: document.getElementById('customMessage').value,
+                    operator: currentUser
+                };
+                
+                console.log('物流更新資料:', updateData);
+                
+                // 呼叫後端 API
+                const result = await updateShippingInfo(updateData);
+                
+                if (result.success) {
+                    // 更新前端顯示
+                    updateLocalOrdersAfterShipping(orderIds, trackingNumber, shippingDate);
+                    
+                    // 關閉彈窗
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('shippingModal'));
+                    modal.hide();
+                    
+                    // 顯示成功訊息
+                    showToast(`✅ 成功更新 ${orderIds.length} 筆訂單物流資訊${enablePush ? '並發送推播' : ''}`, 'success');
+                    
+                    // 記錄操作
+                    logActivity(currentUser, '批量物流更新', `更新 ${orderIds.length} 筆訂單，追蹤號碼：${trackingNumber}`);
+                    
+                } else {
+                    throw new Error(result.error || '更新失敗');
+                }
+                
+            } catch (error) {
+                console.error('執行物流更新失敗:', error);
+                showToast(`❌ 更新失敗：${error.message}`, 'error');
+            }
+        }
+        
+        // 更新後端物流資訊
+        async function updateShippingInfo(updateData) {
+            try {
+                const result = await apiRequest('', {
+                    params: {
+                        action: 'updateShippingInfo',
+                        data: JSON.stringify(updateData)
+                    }
+                });
+                
+                return result;
+                
+            } catch (error) {
+                console.error('呼叫物流更新 API 失敗:', error);
+                return {
+                    success: false,
+                    error: error.toString()
+                };
+            }
+        }
+        
+        // 更新本地訂單資料
+        function updateLocalOrdersAfterShipping(orderIds, trackingNumber, shippingDate) {
+            orderIds.forEach(orderId => {
+                const order = ordersData.find(o => o.id == orderId);
+                if (order) {
+                    order.status = 'shipping';
+                    order.notes = `追蹤號碼：${trackingNumber}，寄送日期：${shippingDate}`;
+                    order.trackingNumber = trackingNumber;
+                    order.shippingDate = shippingDate;
+                }
+            });
+            
+            // 重新渲染表格
+            renderOrdersTable();
+            
+            // 清除選擇
+            document.querySelectorAll('.order-checkbox:checked').forEach(cb => cb.checked = false);
+            document.getElementById('selectAll').checked = false;
+        }
 
         // API 設定
         const API_CONFIG = {
@@ -2132,6 +2321,90 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
                     <button type="button" class="btn btn-primary" onclick="saveAllProductStatuses()">確認修改</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 物流管理彈窗 -->
+    <div class="modal fade" id="shippingModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header" style="background: var(--primary-color); color: white;">
+                    <h5 class="modal-title">
+                        <i class="fas fa-shipping-fast me-2"></i>批量物流管理
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- 選中的訂單顯示 -->
+                    <div class="alert alert-info">
+                        <h6><i class="fas fa-info-circle me-2"></i>已選中的訂單</h6>
+                        <div id="selectedOrdersList">請先選擇要處理的訂單</div>
+                    </div>
+    
+                    <!-- 物流資訊輸入 -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label class="form-label"><strong>追蹤號碼</strong></label>
+                                <input type="text" class="form-control" id="trackingNumber" 
+                                       placeholder="例如：RR123456789JP">
+                                <small class="text-muted">日本郵局追蹤號碼</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label class="form-label"><strong>寄送日期</strong></label>
+                                <input type="date" class="form-control" id="shippingDate" 
+                                       value="">
+                            </div>
+                        </div>
+                    </div>
+    
+                    <!-- 推播設定 -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">📱 LINE 推播設定</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="enableLinePush" checked>
+                                <label class="form-check-label" for="enableLinePush">
+                                    <strong>發送 LINE 推播通知</strong>
+                                </label>
+                            </div>
+                            
+                            <div class="form-group mb-3" id="pushMessageGroup">
+                                <label class="form-label">推播訊息模板</label>
+                                <select class="form-select" id="pushTemplate">
+                                    <option value="shipped">已寄出回台灣通知</option>
+                                    <option value="custom">自訂訊息</option>
+                                </select>
+                            </div>
+    
+                            <div class="form-group mb-3" id="customMessageGroup" style="display: none;">
+                                <label class="form-label">自訂訊息內容</label>
+                                <textarea class="form-control" id="customMessage" rows="3" 
+                                          placeholder="輸入自訂推播訊息..."></textarea>
+                            </div>
+    
+                            <!-- 推播預覽 -->
+                            <div class="alert alert-light" id="pushPreview">
+                                <h6>📱 推播預覽：</h6>
+                                <div id="previewContent">
+                                    您的商品已寄出回台灣<br>
+                                    追蹤號碼：<span id="previewTracking">待輸入</span><br>
+                                    點擊查看物流詳情
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-success" onclick="executeShippingUpdate()">
+                        <i class="fas fa-paper-plane me-2"></i>執行更新並推播
+                    </button>
                 </div>
             </div>
         </div>
