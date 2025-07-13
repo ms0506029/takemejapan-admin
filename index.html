@@ -1529,32 +1529,47 @@
         // 同步 EasyStore 資料
         // 🔴 修改 refreshData 函數
         async function refreshData() {
-            try {
-                showToast('正在同步最新資料...', 'info');
-                
-                const refreshBtn = document.querySelector('button[onclick="refreshData()"]');
-                if (refreshBtn) {
-                    const originalText = refreshBtn.innerHTML;
-                    refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>同步中...';
-                    refreshBtn.disabled = true;
-                    
-                    // 🔴 清除快取，強制重新載入
-                    localStorage.removeItem('ordersData');
-                    localStorage.removeItem('ordersDataTime');
-                    
-                    // 重新載入資料
-                    await loadOrdersDataFromAPI();
-                    
-                    refreshBtn.innerHTML = originalText;
-                    refreshBtn.disabled = false;
+          try {
+            showToast('正在同步最新資料...', 'info');
+            
+            const refreshBtn = document.querySelector('button[onclick="refreshData()"]');
+            if (refreshBtn) {
+              const originalText = refreshBtn.innerHTML;
+              refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>同步中...';
+              refreshBtn.disabled = true;
+              
+              // 🔴 修復：正確呼叫同步 API
+              const syncResult = await apiRequest('', {
+                params: {
+                  action: 'syncOrders',  // 🔴 關鍵：使用正確的 action
+                  days: 5,
+                  operator: currentUser || 'web_admin'
                 }
+              });
+              
+              console.log('🔍 同步結果:', syncResult);
+              
+              if (syncResult.success) {
+                // 清除快取，強制重新載入
+                localStorage.removeItem('ordersData');
+                localStorage.removeItem('ordersDataTime');
                 
-                showToast('✅ 資料同步完成', 'success');
+                // 重新載入訂單資料
+                await loadOrdersDataFromAPI();
                 
-            } catch (error) {
-                console.error('同步資料失敗:', error);
-                showToast(`❌ 同步失敗: ${error.message}`, 'error');
+                showToast(`✅ 同步完成：新增 ${syncResult.newOrders} 筆訂單`, 'success');
+              } else {
+                showToast(`❌ 同步失敗: ${syncResult.error}`, 'error');
+              }
+              
+              refreshBtn.innerHTML = originalText;
+              refreshBtn.disabled = false;
             }
+            
+          } catch (error) {
+            console.error('同步資料失敗:', error);
+            showToast(`❌ 同步失敗: ${error.message}`, 'error');
+          }
         }
 
         
