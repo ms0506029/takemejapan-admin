@@ -967,16 +967,16 @@
        
        
         // 找到 apiRequest 函數，替換為：
+        // 🔴 完全替換現有的 apiRequest 函數
         async function apiRequest(endpoint, options = {}) {
           const { params = {} } = options;
           
           return new Promise((resolve, reject) => {
-            const callbackName = 'jsonp_callback_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+            // 🔴 關鍵修復：使用更穩定的回調函數命名
+            const callbackName = 'api_callback_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
             
-            // 🔴 修復：確保使用正確的 API URL
             const baseUrl = 'https://script.google.com/macros/s/AKfycbwSW1mlWgmryPxlXFIpNksCn0DG0lQb1N8T0TpQykNG7R5sV_bGecMlcJ1JQ8_J2K6E/exec';
             
-            // 合併參數
             const allParams = { callback: callbackName, ...params };
             const paramString = Object.keys(allParams)
               .map(key => `${key}=${encodeURIComponent(allParams[key])}`)
@@ -984,49 +984,85 @@
             
             const url = `${baseUrl}?${paramString}`;
             
-            // 設置全域回調函數
+            console.log('🔗 JSONP 請求:', {
+              callbackName: callbackName,
+              url: url.substring(0, 200) + '...'
+            });
+            
+            // 🔴 關鍵修復：延長超時時間，改善清理邏輯
+            let isResolved = false;
+            let script = null;
+            
+            const timeoutId = setTimeout(() => {
+              if (!isResolved) {
+                console.error('❌ JSONP 請求超時:', callbackName);
+                cleanup();
+                reject(new Error('API 請求超時'));
+              }
+            }, 45000); // 45秒超時
+            
+            // 🔴 關鍵修復：確保回調函數不會被意外清除
             window[callbackName] = function(data) {
-              cleanup();
+              if (isResolved) {
+                console.warn('⚠️ 重複回調，忽略:', callbackName);
+                return;
+              }
+              
+              console.log('✅ JSONP 回調成功:', callbackName);
+              isResolved = true;
+              clearTimeout(timeoutId);
+              
+              // 🔴 延遲清理，確保回調完成
+              setTimeout(() => {
+                cleanup();
+              }, 100);
+              
               resolve(data);
             };
             
             // 清理函數
             const cleanup = () => {
-              delete window[callbackName];
-              if (script.parentNode) {
-                script.parentNode.removeChild(script);
+              try {
+                if (window[callbackName]) {
+                  delete window[callbackName];
+                }
+                if (script && script.parentNode) {
+                  script.parentNode.removeChild(script);
+                }
+              } catch (cleanupError) {
+                console.warn('清理時發生錯誤:', cleanupError);
               }
             };
             
             // 建立 script 標籤
-            const script = document.createElement('script');
-            script.async = true;
-            script.defer = true;
+            script = document.createElement('script');
             script.type = 'text/javascript';
-            
-            // 錯誤處理
-            script.onerror = function() {
-              cleanup();
-              reject(new Error('JSONP 請求失敗'));
-            };
-            
-            // 超時處理（15秒）
-            const timeoutId = setTimeout(() => {
-              if (window[callbackName]) {
-                cleanup();
-                reject(new Error('API 請求超時'));
-              }
-            }, 15000);
-            
-            // 成功時清除超時
-            const originalCallback = window[callbackName];
-            window[callbackName] = function(data) {
-              clearTimeout(timeoutId);
-              originalCallback(data);
-            };
-            
+            script.async = true;
             script.src = url;
-            document.head.appendChild(script);
+            
+            // 🔴 關鍵修復：改善錯誤處理
+            script.onerror = function(error) {
+              if (!isResolved) {
+                console.error('❌ Script 載入失敗:', callbackName, error);
+                isResolved = true;
+                clearTimeout(timeoutId);
+                cleanup();
+                reject(new Error('JSONP Script 載入失敗'));
+              }
+            };
+            
+            script.onload = function() {
+              console.log('📡 Script 載入完成:', callbackName);
+            };
+            
+            // 🔴 關鍵修復：確保 DOM 準備好再插入
+            if (document.readyState === 'loading') {
+              document.addEventListener('DOMContentLoaded', () => {
+                document.head.appendChild(script);
+              });
+            } else {
+              document.head.appendChild(script);
+            }
           });
         }
        
@@ -1608,8 +1644,19 @@
               showToast(`❌ 同步失敗: ${result.error}`, 'error');
             }
             
+          // 🔴 在 syncHistoricalOrders 函數中，找到 try-catch 區塊，替換 catch 部分：
           } catch (error) {
-            showToast(`❌ 同步失敗: ${error.message}`, 'error');
+            console.error('❌ 歷史同步異常:', error);
+          
+            // 🔴 新增：更詳細的錯誤資訊
+            let errorMsg = error.message;
+            if (error.message.includes('callback')) {
+              errorMsg = '網路連線問題，請重新嘗試';
+            } else if (error.message.includes('超時')) {
+              errorMsg = '請求處理時間較長，請稍後重試';
+            }
+          
+            showToast(`❌ 同步失敗: ${errorMsg}`, 'error');
           }
         }
 
