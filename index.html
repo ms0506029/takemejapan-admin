@@ -961,63 +961,66 @@
        
         // 找到 apiRequest 函數，替換為：
         async function apiRequest(endpoint, options = {}) {
-            const { params = {} } = options;
+          const { params = {} } = options;
+          
+          return new Promise((resolve, reject) => {
+            const callbackName = 'jsonp_callback_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
             
-            return new Promise((resolve, reject) => {
-                const callbackName = 'jsonp_callback_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-                
-                // 合併參數
-                const allParams = { callback: callbackName, ...params };
-                const paramString = Object.keys(allParams)
-                    .map(key => `${key}=${encodeURIComponent(allParams[key])}`)
-                    .join('&');
-                
-                const url = `${API_CONFIG.baseUrl}?${paramString}`;
-                
-                // 設置全域回調函數
-                window[callbackName] = function(data) {
-                    cleanup();
-                    resolve(data);
-                };
-                
-                // 清理函數
-                const cleanup = () => {
-                    delete window[callbackName];
-                    if (script.parentNode) {
-                        script.parentNode.removeChild(script);
-                    }
-                };
-                
-                // 建立 script 標籤
-                const script = document.createElement('script');
-                script.async = true;
-                script.defer = true;
-                script.type = 'text/javascript';
-                
-                // 錯誤處理
-                script.onerror = function() {
-                    cleanup();
-                    reject(new Error('JSONP 請求失敗'));
-                };
-                
-                // 超時處理（10秒）
-                const timeoutId = setTimeout(() => {
-                    if (window[callbackName]) {
-                        cleanup();
-                        reject(new Error('API 請求超時'));
-                    }
-                }, 10000);
-                
-                // 成功時清除超時
-                const originalCallback = window[callbackName];
-                window[callbackName] = function(data) {
-                    clearTimeout(timeoutId);
-                    originalCallback(data);
-                };
-                
-                script.src = url;
-                document.head.appendChild(script);
-            });
+            // 🔴 修復：確保使用正確的 API URL
+            const baseUrl = 'https://script.google.com/macros/s/AKfycbwSW1mlWgmryPxlXFIpNksCn0DG0lQb1N8T0TpQykNG7R5sV_bGecMlcJ1JQ8_J2K6E/exec';
+            
+            // 合併參數
+            const allParams = { callback: callbackName, ...params };
+            const paramString = Object.keys(allParams)
+              .map(key => `${key}=${encodeURIComponent(allParams[key])}`)
+              .join('&');
+            
+            const url = `${baseUrl}?${paramString}`;
+            
+            // 設置全域回調函數
+            window[callbackName] = function(data) {
+              cleanup();
+              resolve(data);
+            };
+            
+            // 清理函數
+            const cleanup = () => {
+              delete window[callbackName];
+              if (script.parentNode) {
+                script.parentNode.removeChild(script);
+              }
+            };
+            
+            // 建立 script 標籤
+            const script = document.createElement('script');
+            script.async = true;
+            script.defer = true;
+            script.type = 'text/javascript';
+            
+            // 錯誤處理
+            script.onerror = function() {
+              cleanup();
+              reject(new Error('JSONP 請求失敗'));
+            };
+            
+            // 超時處理（15秒）
+            const timeoutId = setTimeout(() => {
+              if (window[callbackName]) {
+                cleanup();
+                reject(new Error('API 請求超時'));
+              }
+            }, 15000);
+            
+            // 成功時清除超時
+            const originalCallback = window[callbackName];
+            window[callbackName] = function(data) {
+              clearTimeout(timeoutId);
+              originalCallback(data);
+            };
+            
+            script.src = url;
+            document.head.appendChild(script);
+          });
         }
        
 
