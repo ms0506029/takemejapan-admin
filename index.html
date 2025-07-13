@@ -573,7 +573,7 @@
                         <div class="content-body">
                             <div class="row">
                                 <div class="col-md-4 mb-3">
-                                    <button class="btn btn-outline-primary w-100" onclick="refreshData()">
+                                    <button class="btn btn-outline-primary w-100" onclick="()">
                                         <i class="fas fa-sync-alt me-2"></i>同步 EasyStore 資料
                                     </button>
                                 </div>
@@ -1575,6 +1575,40 @@
             
           } catch (error) {
             console.error('同步資料失敗:', error);
+            showToast(`❌ 同步失敗: ${error.message}`, 'error');
+          }
+        }
+        
+        async function syncHistoricalOrders() {
+          try {
+            const days = prompt('要同步最近幾天的已付款未出貨訂單？（建議30-90天）', '30');
+            
+            if (!days || isNaN(days)) {
+              showToast('請輸入有效的天數', 'warning');
+              return;
+            }
+            
+            const confirmMsg = `確定要同步最近 ${days} 天的已付款未出貨訂單嗎？`;
+            if (!confirm(confirmMsg)) return;
+            
+            showToast('正在同步歷史訂單，請稍候...', 'info');
+            
+            const result = await apiRequest('', {
+              params: {
+                action: 'syncHistoricalOrders',
+                days: parseInt(days),
+                operator: currentUser || 'admin'
+              }
+            });
+            
+            if (result.success) {
+              showToast(`✅ 同步完成：新增 ${result.newOrders} 筆已付款未出貨訂單`, 'success');
+              await loadOrdersDataFromAPI();
+            } else {
+              showToast(`❌ 同步失敗: ${result.error}`, 'error');
+            }
+            
+          } catch (error) {
             showToast(`❌ 同步失敗: ${error.message}`, 'error');
           }
         }
