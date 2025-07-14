@@ -1183,9 +1183,8 @@
                         customer: order.customerName || '未知客戶',
                         product: extractProductNames(order.productInfo),
                         amount: parseFloat(order.orderAmount) || 0,
-                        status: order.orderStatus || 'unpaid',  // ✅ 使用 API 回傳的狀態
+                        status: order.orderStatus || 'unpaid',
                         orderTime: order.orderTime,
-                        // 🔴 關鍵：確保所有欄位都有值
                         email: order.customerEmail || '',
                         phone: order.customerPhone || '',
                         address: order.address || '{}',
@@ -1193,7 +1192,11 @@
                         paymentStatus: order.paymentStatus || 'paid',
                         notes: order.notes || '',
                         shipping: order.shipping || 0,
-                        discount: order.discount || 0
+                        discount: order.discount || 0,
+                        // 🔴 關鍵修復：正確映射 LINE User ID
+                        lineUserId: order.lineUserId || order.LINE_User_ID || order['LINE_User_ID'] || '',
+                        trackingNumber: order.trackingNumber || '',
+                        shippingDate: order.shippingDate || ''
                     }));
                 
                 // 按照下單時間排序（最新在上）
@@ -2016,18 +2019,135 @@
 
         // 通知客戶
         function notifyCustomer(orderId) {
-            const order = ordersData.find(o => o.id === orderId);
-            if (!order || !order.lineUserId) {
-                showToast('找不到客戶 LINE 資料', 'error');
+            console.log('🔔 開始通知客戶，訂單ID:', orderId);
+            
+            // 🔴 修正：使用正確的查找方式
+            const order = ordersData.find(o => o.id == orderId); // 使用 == 避免類型問題
+            
+            if (!order) {
+                console.error('❌ 找不到訂單:', orderId);
+                showToast('找不到訂單資料', 'error');
                 return;
             }
             
-            showToast('正在發送 LINE 通知...', 'info');
+            console.log('📋 找到訂單:', order);
+            console.log('📧 客戶Email:', order.email);
+            console.log('👤 LINE User ID:', order.lineUserId);
             
-            setTimeout(() => {
-                showToast(`已成功通知客戶 ${order.customer}`, 'success');
-                logActivity(currentUser, 'LINE 通知', `向 ${order.customer} 發送訂單 ${orderId} 狀態通知`);
-            }, 1500);
+            // 🔴 修正：檢查 lineUserId 欄位（不是 lineUserId）
+            const lineUserId = order.lineUserId || order.LINE_User_ID || order['LINE_User_ID'];
+            
+            if (!lineUserId || lineUserId.trim() === '') {
+                console.log('❌ 該客戶尚未綁定 LINE 帳號');
+                showToast(`客戶 ${order.customer} 尚未綁定 LINE 帳號`, 'warning');
+                return;
+            }
+            
+            console.log('✅ 找到 LINE User ID:', lineUserId);
+            
+            // 🔴 新增：實際呼叫 LINE Push API
+            sendLineNotificationToCustomer(orderId, lineUserId, order);
+        }
+        // 2. 🔴 新增實際的 LINE 推播函數
+        async function sendLineNotificationToCustomer(orderId, lineUserId, order) {
+            try {
+                showToast('正在發送 LINE 通知...', 'info');
+                
+                // 準備推播訊息
+                const message = createOrderStatusMessage(order);
+                
+                // 🔴 呼叫後端 LINE 推播 API
+                const result = await apiRequest('', {
+                    params: {
+                        action: 'sendLinePush',
+                        userId: lineUserId,
+                        orderId: orderId,
+                        message: JSON.stringify(message),
+                        operator: currentUser
+                    }
+                });
+                
+                if (result.success) {
+                    showToast(`✅ 已成功通知客戶 ${order.customer}`, 'success');
+                    logActivity(currentUser, 'LINE 通知', `向 ${order.customer} 發送訂單 ${orderId} 狀態通知`);
+                } else {
+                    throw new Error(result.error || '推播失敗');
+                }
+                
+            } catch (error) {
+                console.error('❌ LINE 推播失敗:', error);
+                showToast(`❌ 通知失敗：${error.message}`, 'error');
+            }
+        }
+        // 5. 🔴 建立訂單狀態訊息
+        function createOrderStatusMessage(order) {
+            const statusText = {
+                'unpaid': '待付款',
+                'paid': '已付款',
+                'outofstock': '缺貨中',
+                'shipping': '預計出貨',
+                'shipped_to_taiwan': '已出貨回台中'
+            };
+            
+            return {
+                type: 'flex',
+                altText: `訂單 ${order.id} 狀態更新`,
+                contents: {
+                    type: 'bubble',
+                    header: {
+                        type: 'box',
+                        layout: 'vertical',
+                        contents: [
+                            {
+                                type: 'text',
+                                text: '📦 訂單狀態更新',
+                                weight: 'bold',
+                                size: 'xl',
+                                color: '#C9915D'
+                            }
+                        ]
+                    },
+                    body: {
+                        type: 'box',
+                        layout: 'vertical',
+                        contents: [
+                            {
+                                type: 'text',
+                                text: `訂單編號：${order.id}`,
+                                weight: 'bold',
+                                size: 'lg'
+                            },
+                            {
+                                type: 'text',
+                                text: `狀態：${statusText[order.status] || order.status}`,
+                                margin: 'md',
+                                color: '#1DB446'
+                            },
+                            {
+                                type: 'text',
+                                text: `金額：NT$ ${order.amount.toLocaleString()}`,
+                                margin: 'md'
+                            }
+                        ]
+                    },
+                    footer: {
+                        type: 'box',
+                        layout: 'vertical',
+                        contents: [
+                            {
+                                type: 'button',
+                                action: {
+                                    type: 'message',
+                                    label: '查看我的訂單',
+                                    text: '我的訂單'
+                                },
+                                style: 'primary',
+                                color: '#C9915D'
+                            }
+                        ]
+                    }
+                }
+            };
         }
 
         // 刪除訂單
@@ -2079,6 +2199,7 @@
         }
 
         // 批量通知
+        // 3. 🔴 修復批量推播函數
         function bulkNotify() {
             const checkedBoxes = document.querySelectorAll('.order-checkbox:checked');
             if (checkedBoxes.length === 0) {
@@ -2086,11 +2207,79 @@
                 return;
             }
             
+            console.log('📱 開始批量推播，選中訂單數:', checkedBoxes.length);
+            
             const orderIds = Array.from(checkedBoxes).map(cb => cb.value);
             
-            if (confirm(`確定要向 ${orderIds.length} 位客戶發送通知嗎？`)) {
-                orderIds.forEach(orderId => notifyCustomer(orderId));
+            // 🔴 檢查每個訂單的 LINE 綁定狀態
+            const validOrders = [];
+            const invalidOrders = [];
+            
+            orderIds.forEach(orderId => {
+                const order = ordersData.find(o => o.id == orderId);
+                const lineUserId = order ? (order.lineUserId || order.LINE_User_ID || order['LINE_User_ID']) : null;
+                
+                if (order && lineUserId && lineUserId.trim() !== '') {
+                    validOrders.push({ orderId, order, lineUserId });
+                } else {
+                    invalidOrders.push({ orderId, customerName: order ? order.customer : '未知客戶' });
+                }
+            });
+            
+            console.log('✅ 可推播訂單:', validOrders.length);
+            console.log('❌ 無法推播訂單:', invalidOrders.length);
+            
+            if (validOrders.length === 0) {
+                showToast('選中的訂單都沒有綁定 LINE 帳號', 'warning');
+                return;
             }
+            
+            // 顯示確認訊息
+            let confirmMessage = `確定要向 ${validOrders.length} 位客戶發送通知嗎？`;
+            if (invalidOrders.length > 0) {
+                confirmMessage += `\n\n注意：有 ${invalidOrders.length} 筆訂單因未綁定 LINE 而無法推播`;
+            }
+            
+            if (confirm(confirmMessage)) {
+                executeBulkLineNotify(validOrders, invalidOrders);
+            }
+        }
+        
+        // 4. 🔴 執行批量 LINE 推播
+        async function executeBulkLineNotify(validOrders, invalidOrders) {
+            showToast('正在批量發送 LINE 通知...', 'info');
+            
+            let successCount = 0;
+            let failCount = 0;
+            
+            for (const item of validOrders) {
+                try {
+                    await sendLineNotificationToCustomer(item.orderId, item.lineUserId, item.order);
+                    successCount++;
+                    
+                    // 避免 API 限制，每次推播間隔 200ms
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    
+                } catch (error) {
+                    console.error(`推播失敗 ${item.orderId}:`, error);
+                    failCount++;
+                }
+            }
+            
+            // 顯示結果
+            let resultMessage = `✅ 推播完成：成功 ${successCount} 筆`;
+            if (failCount > 0) {
+                resultMessage += `，失敗 ${failCount} 筆`;
+            }
+            if (invalidOrders.length > 0) {
+                resultMessage += `，跳過 ${invalidOrders.length} 筆（未綁定）`;
+            }
+            
+            showToast(resultMessage, successCount > 0 ? 'success' : 'warning');
+            
+            // 記錄操作
+            logActivity(currentUser, '批量 LINE 推播', 
+                `成功：${successCount}，失敗：${failCount}，跳過：${invalidOrders.length}`);
         }
 
         // 批量通知客戶
