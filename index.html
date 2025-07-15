@@ -2049,36 +2049,42 @@
             sendLineNotificationToCustomer(orderId, lineUserId, order);
         }
         // 2. 🔴 新增實際的 LINE 推播函數
-        async function sendLineNotificationToCustomer(orderId, lineUserId, order) {
-            try {
-                showToast('正在發送 LINE 通知...', 'info');
+        async function sendLineNotificationToCustomer(orderId, lineUserId, orderData) {
+            return new Promise((resolve, reject) => {
+                const params = {
+                    userId: lineUserId,
+                    message: JSON.stringify({
+                        type: 'text',
+                        text: `📦 您的訂單 #${orderId} 已出貨\n\n感謝您的訂購！`
+                    }),
+                    operator: 'admin'
+                };
                 
-                // 準備推播訊息
-                const message = createOrderStatusMessage(order);
-                
-                // 🔴 呼叫後端 LINE 推播 API
-                const result = await apiRequest('', {
-                    params: {
-                        action: 'sendLinePush',
-                        userId: lineUserId,
-                        orderId: orderId,
-                        message: JSON.stringify(message),
-                        operator: currentUser
+                callGASAPI('sendSimpleLinePush', params, (response) => {
+                    if (response.success) {
+                        resolve(response);
+                    } else {
+                        reject(new Error(response.error || '推播失敗'));
                     }
                 });
-                
-                if (result.success) {
-                    showToast(`✅ 已成功通知客戶 ${order.customer}`, 'success');
-                    logActivity(currentUser, 'LINE 通知', `向 ${order.customer} 發送訂單 ${orderId} 狀態通知`);
-                } else {
-                    throw new Error(result.error || '推播失敗');
-                }
-                
-            } catch (error) {
-                console.error('❌ LINE 推播失敗:', error);
-                showToast(`❌ 通知失敗：${error.message}`, 'error');
+            });
+        }
+        // 🔴 修復：Toast 提示函數
+        function showToast(message, type = 'info') {
+            console.log(`[${type.toUpperCase()}] ${message}`);
+            
+            // 如果有現成的 toast 系統就使用，沒有就用 alert
+            if (typeof window.showNotification === 'function') {
+                window.showNotification(message, type);
+            } else if (typeof window.toast === 'function') {
+                window.toast(message, type);
+            } else {
+                // 後備方案：使用 alert
+                alert(`${type.toUpperCase()}: ${message}`);
             }
         }
+
+        
         // 5. 🔴 建立訂單狀態訊息
         function createOrderStatusMessage(order) {
             const statusText = {
@@ -2266,7 +2272,7 @@
                 }
             }
             
-            // 顯示結果
+            // 🔴 修復：完整的三元運算子語法
             let resultMessage = `✅ 推播完成：成功 ${successCount} 筆`;
             if (failCount > 0) {
                 resultMessage += `，失敗 ${failCount} 筆`;
@@ -2275,11 +2281,54 @@
                 resultMessage += `，跳過 ${invalidOrders.length} 筆（未綁定）`;
             }
             
+            // 🔴 修復：完整的函數調用
             showToast(resultMessage, successCount > 0 ? 'success' : 'warning');
+        }
+        
+        // 🔴 新增：修復 JSONP 調用方式
+        function callGASAPI(action, params, callback) {
+            const baseUrl = 'https://script.google.com/macros/s/AKfycbwSW1mlWgmryPxlXFIpNksCn0DG0lQb1N8T0TpQykNG7R5sV_bGecMlcJ1JQ8_J2K6E/exec';
             
-            // 記錄操作
-            logActivity(currentUser, '批量 LINE 推播', 
-                `成功：${successCount}，失敗：${failCount}，跳過：${invalidOrders.length}`);
+            // 🔴 修復：產生唯一的回調函數名
+            const callbackName = `callback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
+            // 註冊全域回調函數
+            window[callbackName] = function(response) {
+                // 清理全域函數
+                delete window[callbackName];
+                
+                // 移除 script 標籤
+                const script = document.getElementById(callbackName);
+                if (script) {
+                    script.remove();
+                }
+                
+                // 執行回調
+                if (callback) {
+                    callback(response);
+                }
+            };
+            
+            // 建構 URL
+            const urlParams = new URLSearchParams(params);
+            urlParams.append('action', action);
+            urlParams.append('callback', callbackName);
+            
+            const fullUrl = `${baseUrl}?${urlParams.toString()}`;
+            
+            // 建立 script 標籤進行 JSONP 調用
+            const script = document.createElement('script');
+            script.id = callbackName;
+            script.src = fullUrl;
+            script.onerror = function() {
+                console.error('API 調用失敗');
+                delete window[callbackName];
+                if (callback) {
+                    callback({ success: false, error: 'API 調用失敗' });
+                }
+            };
+            
+            document.head.appendChild(script);
         }
 
         // 批量通知客戶
