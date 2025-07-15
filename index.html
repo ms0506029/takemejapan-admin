@@ -2074,44 +2074,12 @@
             }
         }
 
-        // 通知客戶
-        function notifyCustomer(orderId) {
-            console.log('🔔 開始通知客戶，訂單ID:', orderId);
-            
-            // 🔴 修正：使用正確的查找方式
-            const order = ordersData.find(o => o.id == orderId); // 使用 == 避免類型問題
-            
-            if (!order) {
-                console.error('❌ 找不到訂單:', orderId);
-                showToast('找不到訂單資料', 'error');
-                return;
-            }
-            
-            console.log('📋 找到訂單:', order);
-            console.log('📧 客戶Email:', order.email);
-            console.log('👤 LINE User ID:', order.lineUserId);
-            
-            // 🔴 修正：檢查 lineUserId 欄位（不是 lineUserId）
-            const lineUserId = order.lineUserId || order.LINE_User_ID || order['LINE_User_ID'];
-            
-            if (!lineUserId || lineUserId.trim() === '') {
-                console.log('❌ 該客戶尚未綁定 LINE 帳號');
-                showToast(`客戶 ${order.customer} 尚未綁定 LINE 帳號`, 'warning');
-                return;
-            }
-            
-            console.log('✅ 找到 LINE User ID:', lineUserId);
-            
-            // 🔴 新增：實際呼叫 LINE Push API
-            sendLineNotificationToCustomer(orderId, lineUserId, order);
-        }
-        // 2. 🔴 新增實際的 LINE 推播函數
-        // 通知客戶 - 增加反饋版本
+        // 通知客戶 - 簡化版本
         function notifyCustomer(orderId) {
             console.log('🔔 開始通知客戶，訂單ID:', orderId);
             
             // 🔴 新增：找到按鈕元素並變更狀態
-            const notifyBtn = event.target; // 取得被點擊的按鈕
+            const notifyBtn = event.target;
             const originalHtml = notifyBtn.innerHTML;
             const originalClass = notifyBtn.className;
             
@@ -2120,74 +2088,80 @@
             notifyBtn.className = 'action-btn btn-loading';
             notifyBtn.disabled = true;
             
-            // 🔴 修正：使用正確的查找方式
             const order = ordersData.find(o => o.id == orderId);
             
             if (!order) {
                 console.error('❌ 找不到訂單:', orderId);
-                
-                // 🔴 新增：錯誤狀態反饋
-                notifyBtn.innerHTML = '<i class="fas fa-times"></i>';
-                notifyBtn.className = 'action-btn btn-error';
-                showToast('找不到訂單資料', 'error');
-                
-                // 2秒後恢復原狀
-                setTimeout(() => {
-                    notifyBtn.innerHTML = originalHtml;
-                    notifyBtn.className = originalClass;
-                    notifyBtn.disabled = false;
-                }, 2000);
+                showErrorState(notifyBtn, originalHtml, originalClass, '找不到訂單資料');
                 return;
             }
             
-            console.log('📋 找到訂單:', order);
-            console.log('📧 客戶Email:', order.email);
-            console.log('👤 LINE User ID:', order.lineUserId);
-            
-            // 🔴 修正：檢查 lineUserId 欄位
             const lineUserId = order.lineUserId || order.LINE_User_ID || order['LINE_User_ID'];
             
             if (!lineUserId || lineUserId.trim() === '') {
                 console.log('❌ 該客戶尚未綁定 LINE 帳號');
-                
-                // 🔴 新增：警告狀態反饋
-                notifyBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
-                notifyBtn.className = 'action-btn btn-warning';
-                showToast(`客戶 ${order.customer} 尚未綁定 LINE 帳號`, 'warning');
-                
-                // 2秒後恢復原狀
-                setTimeout(() => {
-                    notifyBtn.innerHTML = originalHtml;
-                    notifyBtn.className = originalClass;
-                    notifyBtn.disabled = false;
-                }, 2000);
+                showWarningState(notifyBtn, originalHtml, originalClass, `客戶 ${order.customer} 尚未綁定 LINE 帳號`);
                 return;
             }
             
             console.log('✅ 找到 LINE User ID:', lineUserId);
             
-            // 🔴 新增：調用推播函數並處理結果
-            sendLineNotificationToCustomer(orderId, lineUserId, order)
-                .then(result => {
-                    // 🔴 成功狀態反饋
-                    notifyBtn.innerHTML = '<i class="fas fa-check"></i>';
-                    notifyBtn.className = 'action-btn btn-success-feedback';
-                    showToast(`✅ 已成功通知客戶 ${order.customer}`, 'success');
-                })
-                .catch(error => {
-                    // 🔴 失敗狀態反饋
-                    notifyBtn.innerHTML = '<i class="fas fa-times"></i>';
-                    notifyBtn.className = 'action-btn btn-error';
-                    showToast(`❌ 通知失敗：${error.message}`, 'error');
-                })
-                .finally(() => {
-                    // 🔴 2秒後恢復原狀
-                    setTimeout(() => {
-                        notifyBtn.innerHTML = originalHtml;
-                        notifyBtn.className = originalClass;
-                        notifyBtn.disabled = false;
-                    }, 2000);
-                });
+            // 🔴 直接呼叫 API
+            apiRequest('', {
+                params: {
+                    action: 'sendSimpleLinePush',
+                    userId: lineUserId,
+                    orderId: orderId,
+                    operator: currentUser
+                }
+            }).then(result => {
+                if (result.success) {
+                    showSuccessState(notifyBtn, originalHtml, originalClass, `✅ 已成功通知客戶 ${order.customer}`);
+                    logActivity(currentUser, 'LINE 通知', `向 ${order.customer} 發送訂單 ${orderId} 狀態通知`);
+                } else {
+                    throw new Error(result.error || '推播失敗');
+                }
+            }).catch(error => {
+                console.error('❌ LINE 推播失敗:', error);
+                showErrorState(notifyBtn, originalHtml, originalClass, `❌ 通知失敗：${error.message}`);
+            });
+        }
+        
+        // 🔴 新增：狀態顯示輔助函數
+        function showSuccessState(btn, originalHtml, originalClass, message) {
+            btn.innerHTML = '<i class="fas fa-check"></i>';
+            btn.className = 'action-btn btn-success-feedback';
+            showToast(message, 'success');
+            
+            setTimeout(() => {
+                btn.innerHTML = originalHtml;
+                btn.className = originalClass;
+                btn.disabled = false;
+            }, 2000);
+        }
+        
+        function showErrorState(btn, originalHtml, originalClass, message) {
+            btn.innerHTML = '<i class="fas fa-times"></i>';
+            btn.className = 'action-btn btn-error';
+            showToast(message, 'error');
+            
+            setTimeout(() => {
+                btn.innerHTML = originalHtml;
+                btn.className = originalClass;
+                btn.disabled = false;
+            }, 2000);
+        }
+        
+        function showWarningState(btn, originalHtml, originalClass, message) {
+            btn.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
+            btn.className = 'action-btn btn-warning';
+            showToast(message, 'warning');
+            
+            setTimeout(() => {
+                btn.innerHTML = originalHtml;
+                btn.className = originalClass;
+                btn.disabled = false;
+            }, 2000);
         }
 
         // 🔴 修復：Toast 提示函數
