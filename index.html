@@ -345,6 +345,63 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
 
+        /* 載入狀態 */
+        .btn-loading {
+            background: #6c757d !important;
+            color: white !important;
+            cursor: not-allowed !important;
+        }
+        
+        /* 成功狀態 */
+        .btn-success-feedback {
+            background: #28a745 !important;
+            color: white !important;
+            animation: pulse-success 0.6s ease-in-out;
+        }
+        
+        /* 錯誤狀態 */
+        .btn-error {
+            background: #dc3545 !important;
+            color: white !important;
+            animation: shake 0.6s ease-in-out;
+        }
+        
+        /* 警告狀態 */
+        .btn-warning {
+            background: #ffc107 !important;
+            color: #2c3e50 !important;
+            animation: pulse-warning 0.6s ease-in-out;
+        }
+        
+        /* 動畫效果 */
+        @keyframes pulse-success {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        @keyframes pulse-warning {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        
+        /* 旋轉動畫 */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .fa-spin {
+            animation: spin 1s linear infinite;
+        }
+
         /* 批量操作 */
         .bulk-actions {
             background: white;
@@ -2049,23 +2106,88 @@
             sendLineNotificationToCustomer(orderId, lineUserId, order);
         }
         // 2. 🔴 新增實際的 LINE 推播函數
-        function sendLineNotificationToCustomer(orderId, lineUserId) {
-          // 把 JSONP 包進 Promise
-          return new Promise((resolve, reject) => {
-            const params = {
-              userId: lineUserId,
-              orderId: orderId,
-              operator: currentUser
-            };
-        
-            callGASAPI('sendSimpleLinePush', params, (response) => {
-              if (response && response.success) {
-                resolve(response);
-              } else {
-                reject(new Error(response ? response.error || '推播失敗' : '無回應'));
-              }
-            });
-          });
+        // 通知客戶 - 增加反饋版本
+        function notifyCustomer(orderId) {
+            console.log('🔔 開始通知客戶，訂單ID:', orderId);
+            
+            // 🔴 新增：找到按鈕元素並變更狀態
+            const notifyBtn = event.target; // 取得被點擊的按鈕
+            const originalHtml = notifyBtn.innerHTML;
+            const originalClass = notifyBtn.className;
+            
+            // 🔴 新增：顯示載入狀態
+            notifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            notifyBtn.className = 'action-btn btn-loading';
+            notifyBtn.disabled = true;
+            
+            // 🔴 修正：使用正確的查找方式
+            const order = ordersData.find(o => o.id == orderId);
+            
+            if (!order) {
+                console.error('❌ 找不到訂單:', orderId);
+                
+                // 🔴 新增：錯誤狀態反饋
+                notifyBtn.innerHTML = '<i class="fas fa-times"></i>';
+                notifyBtn.className = 'action-btn btn-error';
+                showToast('找不到訂單資料', 'error');
+                
+                // 2秒後恢復原狀
+                setTimeout(() => {
+                    notifyBtn.innerHTML = originalHtml;
+                    notifyBtn.className = originalClass;
+                    notifyBtn.disabled = false;
+                }, 2000);
+                return;
+            }
+            
+            console.log('📋 找到訂單:', order);
+            console.log('📧 客戶Email:', order.email);
+            console.log('👤 LINE User ID:', order.lineUserId);
+            
+            // 🔴 修正：檢查 lineUserId 欄位
+            const lineUserId = order.lineUserId || order.LINE_User_ID || order['LINE_User_ID'];
+            
+            if (!lineUserId || lineUserId.trim() === '') {
+                console.log('❌ 該客戶尚未綁定 LINE 帳號');
+                
+                // 🔴 新增：警告狀態反饋
+                notifyBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
+                notifyBtn.className = 'action-btn btn-warning';
+                showToast(`客戶 ${order.customer} 尚未綁定 LINE 帳號`, 'warning');
+                
+                // 2秒後恢復原狀
+                setTimeout(() => {
+                    notifyBtn.innerHTML = originalHtml;
+                    notifyBtn.className = originalClass;
+                    notifyBtn.disabled = false;
+                }, 2000);
+                return;
+            }
+            
+            console.log('✅ 找到 LINE User ID:', lineUserId);
+            
+            // 🔴 新增：調用推播函數並處理結果
+            sendLineNotificationToCustomer(orderId, lineUserId, order)
+                .then(result => {
+                    // 🔴 成功狀態反饋
+                    notifyBtn.innerHTML = '<i class="fas fa-check"></i>';
+                    notifyBtn.className = 'action-btn btn-success-feedback';
+                    showToast(`✅ 已成功通知客戶 ${order.customer}`, 'success');
+                })
+                .catch(error => {
+                    // 🔴 失敗狀態反饋
+                    notifyBtn.innerHTML = '<i class="fas fa-times"></i>';
+                    notifyBtn.className = 'action-btn btn-error';
+                    showToast(`❌ 通知失敗：${error.message}`, 'error');
+                })
+                .finally(() => {
+                    // 🔴 2秒後恢復原狀
+                    setTimeout(() => {
+                        notifyBtn.innerHTML = originalHtml;
+                        notifyBtn.className = originalClass;
+                        notifyBtn.disabled = false;
+                    }, 2000);
+                });
         }
 
         // 🔴 修復：Toast 提示函數
