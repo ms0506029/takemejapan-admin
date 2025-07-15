@@ -2178,6 +2178,34 @@
                 alert(`${type.toUpperCase()}: ${message}`);
             }
         }
+        // 2. 🔴 新增實際的 LINE 推播函數
+        async function sendLineNotificationToCustomer(orderId, lineUserId, order) {
+            try {
+                showToast('正在發送 LINE 通知...', 'info');
+                
+                // 🔴 呼叫後端 LINE 推播 API
+                const result = await apiRequest('', {
+                    params: {
+                        action: 'sendSimpleLinePush',  // ← 使用正確的 action
+                        userId: lineUserId,
+                        orderId: orderId,              // ← 傳送 orderId
+                        operator: currentUser
+                    }
+                });
+                
+                if (result.success) {
+                    console.log('✅ LINE 推播成功');
+                    logActivity(currentUser, 'LINE 通知', `向 ${order.customer} 發送訂單 ${orderId} 狀態通知`);
+                    return result;
+                } else {
+                    throw new Error(result.error || '推播失敗');
+                }
+                
+            } catch (error) {
+                console.error('❌ LINE 推播失敗:', error);
+                throw error;
+            }
+        }
 
         
         // 5. 🔴 建立訂單狀態訊息
