@@ -2049,26 +2049,25 @@
             sendLineNotificationToCustomer(orderId, lineUserId, order);
         }
         // 2. 🔴 新增實際的 LINE 推播函數
-        async function sendLineNotificationToCustomer(orderId, lineUserId, order) {
-            const result = await apiRequest('', {
-                params: {
-                    action: 'sendSimpleLinePush',  // ← 使用正確的 action
-                    userId: lineUserId,
-                    orderId: orderId,              // ← 新增：傳送 orderId
-                    operator: currentUser
-                    // ❌ 移除：不要再傳 message 參數
-                }
+        function sendLineNotificationToCustomer(orderId, lineUserId) {
+          // 把 JSONP 包進 Promise
+          return new Promise((resolve, reject) => {
+            const params = {
+              userId: lineUserId,
+              orderId: orderId,
+              operator: currentUser
+            };
+        
+            callGASAPI('sendSimpleLinePush', params, (response) => {
+              if (response && response.success) {
+                resolve(response);
+              } else {
+                reject(new Error(response ? response.error || '推播失敗' : '無回應'));
+              }
             });
-                
-                callGASAPI('sendSimpleLinePush', params, (response) => {
-                    if (response.success) {
-                        resolve(response);
-                    } else {
-                        reject(new Error(response.error || '推播失敗'));
-                    }
-                });
-            });
+          });
         }
+
         // 🔴 修復：Toast 提示函數
         function showToast(message, type = 'info') {
             console.log(`[${type.toUpperCase()}] ${message}`);
