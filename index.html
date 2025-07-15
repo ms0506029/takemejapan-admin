@@ -2599,6 +2599,7 @@
             }, 3000);
         }
         // 🔴 新增：批量儲存所有商品狀態
+        // 🔧 修正：批量儲存所有商品狀態（加入後端同步）
         async function saveAllProductStatuses() {
             const orderId = window.currentOrderId;
             if (!orderId) return;
@@ -2625,6 +2626,28 @@
                     });
                 });
                 
+                // 🔴 新增：逐個調用後端 API 更新每個商品狀態
+                for (const item of productStatuses) {
+                    console.log('🔄 更新商品:', item);
+                    
+                    const result = await apiRequest('', {
+                        params: {
+                            action: 'updateProductStatus',
+                            orderId: orderId,
+                            productIndex: item.index,
+                            newStatus: item.status,
+                            shippingTime: item.shippingTime,
+                            operator: currentUser || 'admin'
+                        }
+                    });
+                    
+                    if (!result.success) {
+                        throw new Error(`商品 ${item.index + 1} 更新失敗: ${result.error}`);
+                    }
+                    
+                    console.log(`✅ 商品 ${item.index + 1} 後端更新成功`);
+                }
+                
                 // 更新本地商品資料
                 const products = JSON.parse(order.productInfo || '[]');
                 productStatuses.forEach(item => {
@@ -2639,36 +2662,33 @@
                 // 儲存回訂單資料
                 order.productInfo = JSON.stringify(products);
                 
-                // 判斷整個訂單的狀態（根據商品狀態）
+                // 判斷整個訂單的狀態
                 const orderStatus = determineOrderStatus(products);
                 const orderShippingTime = getOrderShippingTime(products);
                 
-                // 同步到後端
-                const syncSuccess = await syncOrderStatusToBackend(orderId, orderStatus, orderShippingTime);
+                // 🔴 移除原有的 syncOrderStatusToBackend，因為已經在上面更新了
                 
-                if (syncSuccess) {
-                    // 更新訂單狀態
-                    order.status = orderStatus;
-                    if (orderShippingTime) {
-                        order.notes = `預計出貨時間：${orderShippingTime}`;
-                        order.shippingTime = orderShippingTime;
-                    }
-                    
-                    // 更新顯示
-                    renderOrdersTable();
-                    
-                    // 關閉彈窗
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('orderDetailModal'));
-                    if (modal) {
-                        modal.hide();
-                    }
-                    
-                    showToast('✅ 所有商品狀態已成功儲存', 'success');
+                // 更新本地訂單狀態
+                order.status = orderStatus;
+                if (orderShippingTime) {
+                    order.notes = `預計出貨時間：${orderShippingTime}`;
+                    order.shippingTime = orderShippingTime;
                 }
+                
+                // 更新顯示
+                renderOrdersTable();
+                
+                // 關閉彈窗
+                const modal = bootstrap.Modal.getInstance(document.getElementById('orderDetailModal'));
+                if (modal) {
+                    modal.hide();
+                }
+                
+                showToast('✅ 所有商品狀態已成功儲存', 'success');
                 
             } catch (error) {
                 console.error('儲存商品狀態失敗:', error);
-                showToast('❌ 儲存失敗，請稍後再試', 'error');
+                showToast(`❌ 儲存失敗：${error.message}`, 'error');
             }
         }
         
@@ -2789,20 +2809,43 @@
         }, true);
         
         // 🔴 新增：更新商品狀態函數
-        function updateProductStatus(orderId, productIndex, newStatus) {
+        // 🔧 修正：更新商品狀態函數（加入後端同步）
+        async function updateProductStatus(orderId, productIndex, newStatus) {
             const order = ordersData.find(o => o.id == orderId);
             if (!order) return;
             
             try {
-                const products = JSON.parse(order.productInfo);
+                console.log('🔄 更新商品狀態:', { orderId, productIndex, newStatus });
+                
+                // 🔴 新增：先調用後端 API 更新 Google Sheets
+                const result = await apiRequest('', {
+                    params: {
+                        action: 'updateProductStatus',
+                        orderId: orderId,
+                        productIndex: productIndex,
+                        newStatus: newStatus,
+                        operator: currentUser || 'admin'
+                    }
+                });
+                
+                if (!result.success) {
+                    throw new Error(result.error || '後端更新失敗');
+                }
+                
+                console.log('✅ 後端更新成功:', result);
+                
+                // 更新本地資料
+                const products = JSON.parse(order.productInfo || '[]');
                 if (products[productIndex]) {
                     products[productIndex].status = newStatus;
                     order.productInfo = JSON.stringify(products);
                     
                     showToast(`✅ 商品 ${productIndex + 1} 狀態已更新為：${getStatusText(newStatus)}`, 'success');
                 }
+                
             } catch (error) {
                 console.error('更新商品狀態失敗:', error);
+                showToast(`❌ 更新失敗：${error.message}`, 'error');
             }
         }
         
