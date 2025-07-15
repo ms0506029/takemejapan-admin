@@ -2049,16 +2049,16 @@
             sendLineNotificationToCustomer(orderId, lineUserId, order);
         }
         // 2. 🔴 新增實際的 LINE 推播函數
-        async function sendLineNotificationToCustomer(orderId, lineUserId, orderData) {
-            return new Promise((resolve, reject) => {
-                const params = {
+        async function sendLineNotificationToCustomer(orderId, lineUserId, order) {
+            const result = await apiRequest('', {
+                params: {
+                    action: 'sendSimpleLinePush',  // ← 使用正確的 action
                     userId: lineUserId,
-                    message: JSON.stringify({
-                        type: 'text',
-                        text: `📦 您的訂單 #${orderId} 已出貨\n\n感謝您的訂購！`
-                    }),
-                    operator: 'admin'
-                };
+                    orderId: orderId,              // ← 新增：傳送 orderId
+                    operator: currentUser
+                    // ❌ 移除：不要再傳 message 參數
+                }
+            });
                 
                 callGASAPI('sendSimpleLinePush', params, (response) => {
                     if (response.success) {
@@ -2087,31 +2087,90 @@
         
         // 5. 🔴 建立訂單狀態訊息
         function createOrderStatusMessage(order) {
-            const statusText = {
-                'unpaid': '待付款',
-                'paid': '已付款',
-                'outofstock': '缺貨中',
-                'shipping': '預計出貨',
-                'shipped_to_taiwan': '已出貨回台中'
-            };
+            console.log('📋 生成訊息，訂單狀態:', order.status);
             
+            // 根據訂單狀態動態產生訊息
+            switch (order.status) {
+                case 'paid':
+                    return createFlexMessage({
+                        title: '✅ 付款成功',
+                        message: `感謝您的付款！\n訂單 #${order.id} 已確認收款，我們正在為您準備商品。`,
+                        color: '#4CAF50',
+                        action: '查看訂單詳情'
+                    });
+                    
+                case 'processing':
+                    return createFlexMessage({
+                        title: '🛒 商品準備中',
+                        message: `您的訂單 #${order.id} 正在處理中\n預計 3-5 個工作天內出貨。`,
+                        color: '#FF9800',
+                        action: '追蹤進度'
+                    });
+                    
+                case 'shipped':
+                    return createFlexMessage({
+                        title: '📦 商品已出貨',
+                        message: `您的訂單 #${order.id} 已出貨！\n追蹤號碼：${order.trackingNumber || '稍後提供'}`,
+                        color: '#2196F3',
+                        action: '追蹤包裹'
+                    });
+                    
+                case 'outofstock':
+                    return createFlexMessage({
+                        title: '⚠️ 商品暫時缺貨',
+                        message: `很抱歉，您的訂單 #${order.id} 中的商品暫時缺貨。\n我們正在努力補貨中，會盡快為您處理。`,
+                        color: '#F44336',
+                        action: '聯絡客服'
+                    });
+                    
+                case 'cancelled':
+                    return createFlexMessage({
+                        title: '❌ 訂單已取消',
+                        message: `您的訂單 #${order.id} 已取消。\n如有疑問請聯絡客服。`,
+                        color: '#9E9E9E',
+                        action: '聯絡客服'
+                    });
+                    
+                case 'completed':
+                    return createFlexMessage({
+                        title: '🎉 訂單已完成',
+                        message: `感謝您的購買！\n訂單 #${order.id} 已完成配送。`,
+                        color: '#4CAF50',
+                        action: '查看訂單'
+                    });
+                    
+                default:
+                    return createFlexMessage({
+                        title: '📋 訂單狀態更新',
+                        message: `您的訂單 #${order.id} 狀態已更新。\n當前狀態：${order.status}`,
+                        color: '#607D8B',
+                        action: '查看詳情'
+                    });
+            }
+        }
+        
+        // 2. 建立精美的 Flex Message 模板
+        function createFlexMessage({ title, message, color, action }) {
             return {
                 type: 'flex',
-                altText: `訂單 ${order.id} 狀態更新`,
+                altText: title,
                 contents: {
                     type: 'bubble',
+                    size: 'kilo',
                     header: {
                         type: 'box',
                         layout: 'vertical',
                         contents: [
                             {
                                 type: 'text',
-                                text: '📦 訂單狀態更新',
+                                text: title,
                                 weight: 'bold',
                                 size: 'xl',
-                                color: '#C9915D'
+                                color: '#FFFFFF'
                             }
-                        ]
+                        ],
+                        backgroundColor: color,
+                        paddingAll: 'lg'
                     },
                     body: {
                         type: 'box',
@@ -2119,19 +2178,27 @@
                         contents: [
                             {
                                 type: 'text',
-                                text: `訂單編號：${order.id}`,
+                                text: 'Take Me Japan',
                                 weight: 'bold',
-                                size: 'lg'
+                                size: 'sm',
+                                color: '#999999'
                             },
                             {
                                 type: 'text',
-                                text: `狀態：${statusText[order.status] || order.status}`,
-                                margin: 'md',
-                                color: '#1DB446'
+                                text: message,
+                                wrap: true,
+                                size: 'md',
+                                margin: 'lg'
+                            },
+                            {
+                                type: 'separator',
+                                margin: 'xl'
                             },
                             {
                                 type: 'text',
-                                text: `金額：NT$ ${order.amount.toLocaleString()}`,
+                                text: `更新時間：${new Date().toLocaleString('zh-TW')}`,
+                                size: 'xs',
+                                color: '#999999',
                                 margin: 'md'
                             }
                         ]
@@ -2143,12 +2210,12 @@
                             {
                                 type: 'button',
                                 action: {
-                                    type: 'message',
-                                    label: '查看我的訂單',
-                                    text: '我的訂單'
+                                    type: 'postback',
+                                    label: action,
+                                    data: `view_order_details`
                                 },
                                 style: 'primary',
-                                color: '#C9915D'
+                                color: color
                             }
                         ]
                     }
