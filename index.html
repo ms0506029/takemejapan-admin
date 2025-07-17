@@ -1186,9 +1186,9 @@
         // 載入訂單資料
         async function loadOrdersDataFromAPI() {
             try {
-                // 🔴 修改：檢查是否強制重新載入
+                // 檢查是否強制重新載入
                 const forceReload = window.forceReloadOrders || false;
-                window.forceReloadOrders = false; // 重置標記
+                window.forceReloadOrders = false;
                 
                 // 檢查本地快取（但允許強制重新載入）
                 if (!forceReload) {
@@ -1209,14 +1209,14 @@
                     }
                 }
                 
-                showToast('正在同步最新訂單資料...', 'info');
+                showToast('正在載入訂單資料...', 'info');
                 
+                // 🔴 修復：統一使用一種 API 調用方式
                 const result = await apiRequest('', {
                     method: 'GET',
-                    params: { action: 'getOrders', timestamp: Date.now() } // 🔴 加入時間戳避免快取
+                    params: { action: 'getOrders', timestamp: Date.now() }
                 });
-
-                // 檢查回應格式
+        
                 console.log('📋 API 回應檢查:', result);
                 
                 if (!result) {
@@ -1227,45 +1227,42 @@
                     throw new Error(result.error || '載入失敗');
                 }
                 
-                // 確保 data 是陣列
-                const orders = result.data || result.orders || [];
-                if (!Array.isArray(orders)) {
-                    console.warn('⚠️ 訂單資料格式異常，嘗試修正:', orders);
+                // 🔴 修復：統一處理資料格式
+                const rawOrders = result.data || [];
+                if (!Array.isArray(rawOrders)) {
+                    console.warn('⚠️ 訂單資料格式異常:', rawOrders);
                     throw new Error('訂單資料格式錯誤');
                 }
-                if (result.success) {
-                    const orders = result.data || result || [];
-                    ordersData = orders.map(order => ({
-                        id: order.orderNumber,
-                        customer: order.customerName || '未知客戶',
-                        product: extractProductNames(order.productInfo),
-                        amount: parseFloat(order.orderAmount) || 0,
-                        status: order.orderStatus || 'unpaid',
-                        orderTime: order.orderTime,
-                        email: order.customerEmail || '',
-                        phone: order.customerPhone || '',
-                        address: order.address || '{}',
-                        productInfo: order.productInfo || '[]',
-                        paymentStatus: order.paymentStatus || 'paid',
-                        notes: order.notes || '',
-                        shipping: order.shipping || 0,
-                        discount: order.discount || 0,
-                        // 🔴 關鍵修復：正確映射 LINE User ID
-                        lineUserId: order.lineUserId || order.LINE_User_ID || order['LINE_User_ID'] || '',
-                        trackingNumber: order.trackingNumber || '',
-                        shippingDate: order.shippingDate || ''
-                    }));
+                
+                // 🔴 修復：統一資料映射邏輯
+                ordersData = rawOrders.map(order => ({
+                    id: order.orderNumber || order.id,
+                    customer: order.customerName || order.customer || '未知客戶',
+                    product: extractProductNames(order.productInfo || order.product),
+                    amount: parseFloat(order.orderAmount || order.amount) || 0,
+                    status: order.orderStatus || order.status || 'unpaid',
+                    orderTime: order.orderTime || order.created_at,
+                    email: order.customerEmail || order.email || '',
+                    phone: order.customerPhone || order.phone || '',
+                    address: order.address || '{}',
+                    productInfo: order.productInfo || '[]',
+                    paymentStatus: order.paymentStatus || 'paid',
+                    notes: order.notes || '',
+                    shipping: order.shipping || 0,
+                    discount: order.discount || 0,
+                    lineUserId: order.lineUserId || order.LINE_User_ID || order['LINE User ID'] || '',
+                    trackingNumber: order.trackingNumber || '',
+                    shippingDate: order.shippingDate || ''
+                }));
                 
                 // 按照下單時間排序（最新在上）
                 ordersData.sort((a, b) => new Date(b.orderTime) - new Date(a.orderTime));
-                    
-                    console.log('訂單資料載入成功:', ordersData.length, '筆訂單');
-                    renderOrdersTable();
-                    updateDashboardStats();
-                    showToast(`成功載入 ${ordersData.length} 筆訂單`, 'success');
-                } else {
-                    throw new Error(result.error || '載入訂單資料失敗');
-                }
+                
+                console.log('訂單資料載入成功:', ordersData.length, '筆訂單');
+                renderOrdersTable();
+                updateDashboardStats();
+                showToast(`成功載入 ${ordersData.length} 筆訂單`, 'success');
+                
                 // 成功載入後儲存到快取
                 if (ordersData.length > 0) {
                     localStorage.setItem('ordersData', JSON.stringify(ordersData));
@@ -1275,7 +1272,7 @@
                 
             } catch (error) {
                 console.error('載入訂單資料失敗:', error);
-                showToast('載入訂單資料失敗', 'error');
+                showToast(`載入失敗: ${error.message}`, 'error');
                 ordersData = [];
                 renderOrdersTable();
             }
