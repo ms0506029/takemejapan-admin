@@ -630,7 +630,7 @@
                         <div class="content-body">
                             <div class="row">
                                 <div class="col-md-4 mb-3">
-                                    <button class="btn btn-outline-primary w-100" onclick="()">
+                                    <button class="btn btn-outline-primary w-100" onclick="refreshData()">
                                         <i class="fas fa-sync-alt me-2"></i>同步 EasyStore 資料
                                     </button>
                                 </div>
@@ -2476,28 +2476,76 @@
         }
         
         // 🔴 新增：修復 JSONP 調用方式
+        // 🔴 修復：更穩定的 JSONP 調用機制
         function callGASAPI(action, params, callback) {
             const baseUrl = 'https://script.google.com/macros/s/AKfycbwSW1mlWgmryPxlXFIpNksCn0DG0lQb1N8T0TpQykNG7R5sV_bGecMlcJ1JQ8_J2K6E/exec';
             
-            // 🔴 修復：產生唯一的回調函數名
-            const callbackName = `callback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            // 🔴 修復：使用更簡單的回調名稱
+            const callbackName = `cb_${Date.now()}`;
+            
+            // 🔴 修復：設定超時機制
+            const timeoutId = setTimeout(() => {
+                console.error('API 調用超時');
+                cleanup();
+                if (callback) {
+                    callback({ success: false, error: 'API 調用超時' });
+                }
+            }, 30000); // 30秒超時
+            
+            // 清理函數
+            function cleanup() {
+                clearTimeout(timeoutId);
+                if (window[callbackName]) {
+                    delete window[callbackName];
+                }
+                const script = document.getElementById(callbackName);
+                if (script && script.parentNode) {
+                    script.parentNode.removeChild(script);
+                }
+            }
             
             // 註冊全域回調函數
             window[callbackName] = function(response) {
-                // 清理全域函數
-                delete window[callbackName];
+                console.log('📡 收到 API 回應:', response);
+                cleanup();
                 
-                // 移除 script 標籤
-                const script = document.getElementById(callbackName);
-                if (script) {
-                    script.remove();
-                }
-                
-                // 執行回調
                 if (callback) {
                     callback(response);
                 }
             };
+            
+            // 建構 URL
+            const urlParams = new URLSearchParams();
+            urlParams.append('action', action);
+            urlParams.append('callback', callbackName);
+            
+            // 添加其他參數
+            for (const [key, value] of Object.entries(params)) {
+                urlParams.append(key, value);
+            }
+            
+            const fullUrl = `${baseUrl}?${urlParams.toString()}`;
+            console.log('🔗 API 調用 URL:', fullUrl);
+            
+            // 建立 script 標籤
+            const script = document.createElement('script');
+            script.id = callbackName;
+            script.type = 'text/javascript';
+            script.src = fullUrl;
+            
+            script.onerror = function(e) {
+                console.error('❌ Script 載入失敗:', e);
+                cleanup();
+                if (callback) {
+                    callback({ success: false, error: 'Script 載入失敗' });
+                }
+            };
+            
+            // 🔴 重要：延遲添加到 DOM，避免競爭條件
+            setTimeout(() => {
+                document.head.appendChild(script);
+            }, 10);
+        }
             
             // 建構 URL
             const urlParams = new URLSearchParams(params);
