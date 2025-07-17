@@ -2547,27 +2547,6 @@
             }, 10);
         }
             
-            // 建構 URL
-            const urlParams = new URLSearchParams(params);
-            urlParams.append('action', action);
-            urlParams.append('callback', callbackName);
-            
-            const fullUrl = `${baseUrl}?${urlParams.toString()}`;
-            
-            // 建立 script 標籤進行 JSONP 調用
-            const script = document.createElement('script');
-            script.id = callbackName;
-            script.src = fullUrl;
-            script.onerror = function() {
-                console.error('API 調用失敗');
-                delete window[callbackName];
-                if (callback) {
-                    callback({ success: false, error: 'API 調用失敗' });
-                }
-            };
-            
-            document.head.appendChild(script);
-        }
 
         // 批量通知客戶
         function sendBulkNotification() {
